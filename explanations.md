@@ -485,3 +485,5 @@ The legacy endpoint is available temporarily to support a smooth transition.
   - Structures the system prompt to focus on clear, concise financial explanations
   - Includes context from the original query to provide relevant analysis
   - Implements robust error handling to provide graceful degradation 
+  this is a best practice
+  
