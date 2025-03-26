@@ -2,7 +2,7 @@
 Tools for improving and tightening LLM-generated financial insights.
 """
 from openai import OpenAI
-from ai_analyst.app.core.config import settings
+from app.core.config import settings
 import logging
 
 # Set up logging

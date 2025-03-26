@@ -5,7 +5,7 @@ from typing import List, Dict, Optional
 from collections import defaultdict
 from openai import OpenAI
 import logging
-from ai_analyst.app.core.config import settings
+from app.core.config import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -142,7 +142,12 @@ When information appears in multiple parts, consolidate it. Focus on providing a
         
         system_msg = {
             "role": "system",
-            "content": "You are an expert financial analyst synthesizing multiple analyses into a single coherent summary."
+            "content": (
+                "You are a senior equity research analyst at a top-tier investment firm. "
+                "Your summary will be read by hundreds of institutional investors, including CIOs, PMs, and potentially someone like Warren Buffett. "
+                "There is no room for fluff or vagueness. Be specific. Use real numbers from the input. Highlight material risks, segment trends, capital strength, and valuation-relevant insight. "
+                "Write as if this is going in a published stock pitch or research note."
+            )
         }
         
         user_msg = {

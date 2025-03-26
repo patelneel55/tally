@@ -7,7 +7,7 @@ using the Polygon.io API through the polygon_client module.
 from typing import Dict, Union, Any, List, Callable
 from functools import reduce
 
-from ai_analyst.app.services.polygon_client import get_ticker_details, get_fundamentals
+from app.services.polygon_client import get_ticker_details, get_fundamentals
 
 # Define a metric mapping to handle different data sources and paths
 metric_map = {

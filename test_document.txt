@@ -1,4 +1,0 @@
-This is a test document for OpenAI analysis.
-It simulates a very basic SEC filing.
-Revenue: $100 million
-Net Income: $25 million

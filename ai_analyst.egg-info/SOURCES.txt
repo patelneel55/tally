@@ -1,6 +1,0 @@
-setup.py
-ai_analyst.egg-info/PKG-INFO
-ai_analyst.egg-info/SOURCES.txt
-ai_analyst.egg-info/dependency_links.txt
-ai_analyst.egg-info/requires.txt
-ai_analyst.egg-info/top_level.txt
