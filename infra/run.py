@@ -3,6 +3,8 @@ import sys
 import logging
 from infra.acquisition.sec_fetcher import EDGARFetcher, FilingType, DataFormat
 from infra.parsers.pdf_parser import PDFParser
+from infra.ingestion.html_loader import HTMLLoader
+from infra.acquisition.sec_fetcher import SECFiling
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
 
@@ -28,27 +30,32 @@ if __name__ == "__main__":
         ticker = "GS"
         doc_type = FilingType.ANNUAL_REPORT
         logger.info("Fetching {ticker} {doc_type} filings")
+
+        "https://www.sec.gov/ix?doc=/Archives/edgar/data/886982/000119312525012226/d910407d8k.htm"
+
+        source = SECF
+        loader = HTMLLoader()
         
-        try:
+        # try:
             
-            # Fetch 8-K filings for Apple
-            filings = await fetcher.fetch(
-                identifier=ticker,
-                filing_type=FilingType.ANNUAL_REPORT,
-                data_format=DataFormat.PDF
-            )
+        #     # Fetch 8-K filings for Apple
+        #     filings = await fetcher.fetch(
+        #         identifier=ticker,
+        #         filing_type=FilingType.CURRENT_REPORT,
+        #         data_format=DataFormat.PDF
+        #     )
 
-            logger.info(f"Found {len(filings)} {doc_type} filings for {ticker}")
-            with Pool(processes=5) as pool:
-                try:
-                    pool.map(parse_filing, filings)
-                except Exception as e:
-                    logger.error(f"Error processing filing: {e}")
+        #     logger.info(f"Found {len(filings)} {doc_type} filings for {ticker}: {filings}")
+        #     # with Pool(processes=5) as pool:
+        #     #     try:
+        #     #         pool.map(parse_filing, filings)
+        #     #     except Exception as e:
+        #     #         logger.error(f"Error processing filing: {e}")
 
-            return None
-        except Exception as e:
-            logger.error(f"Error fetching {ticker} {doc_type} filings: {e}")
-            raise
+        #     return None
+        # except Exception as e:
+        #     logger.error(f"Error fetching {ticker} {doc_type} filings: {e}")
+        #     raise
 
     # Run
     sys.exit(asyncio.run(infra_run()))

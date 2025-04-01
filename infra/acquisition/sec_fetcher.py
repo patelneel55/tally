@@ -25,7 +25,7 @@ from datetime import date as Date
 from enum import Enum
 from infra.core.interfaces import IDataFetcher
 from infra.core.exceptions import ValidationError, DataFetchError
-import infra.acquisition as acquistion
+from infra.acquisition.models import AcquisitionOutput
 from pydantic import BaseModel, Field, field_validator
 import aiohttp
 import json
@@ -53,7 +53,7 @@ class DataFormat(str, Enum):
     PDF = "pdf"
 
 
-class SECFiling(BaseModel, acquistion.AcquisitionOutput):
+class SECFiling(BaseModel, AcquisitionOutput):
     """
     Represents an SEC filing document with associated metadata.
     
