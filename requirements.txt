@@ -16,6 +16,10 @@ numpy==1.25.2              # Numerical computing
 # AI and NLP libraries
 openai==0.28.0             # OpenAI GPT API
 langchain==0.0.285         # Language model tools and chains
+langchain-core>=0.1.0      # Core LangChain components
+
+# Document processing
+pymupdf4llm>=0.1.0         # PDF parsing with PyMuPDF for LLMs
 
 # HTTP and utilities
 requests==2.31.0           # HTTP requests

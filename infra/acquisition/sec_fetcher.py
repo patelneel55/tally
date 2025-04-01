@@ -404,7 +404,9 @@ class EDGARFetcher(IDataFetcher):
         """
         # Create a unique filename based on filing metadata
         filing_date_str = filing.filing_date.strftime("%Y-%m-%d")
-        filename = f"{filing.ticker}_{filing.formType}_{filing.accessionNo}.pdf"
+        # Replace any slashes in formType with hyphens for valid filenames
+        clean_form_type = filing.formType.replace('/', '-')
+        filename = f"{filing.ticker}_{clean_form_type}_{filing.accessionNo}.pdf"
         
         # Create a subdirectory for the ticker to organize cache
         ticker_dir = self.cache_dir / filing.ticker
@@ -579,9 +581,8 @@ class EDGARFetcher(IDataFetcher):
                     # Extract the path after "edgar/data"
                     path_parts = filing.documentURL.split("edgar/data")
                     if len(path_parts) > 1:
-                        edgar_path = f"edgar/data{path_parts[1]}"
                         # Construct the archive URL with the extracted path
-                        archive_url = f"https://archive.sec-api.io/{edgar_path}?token={self.api_key}"
+                        archive_url = f"https://archive.sec-api.io/{path_parts[1]}?token={self.api_key}"
                         filing.textURL = archive_url
                     else:
                         logger.warning(f"Could not extract path from document URL: {filing.documentURL}")

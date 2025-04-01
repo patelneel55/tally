@@ -8,7 +8,8 @@ must follow.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
+from langchain_core.documents import Document
 from datetime import datetime, date
 
 class IDataFetcher(ABC):
@@ -108,4 +109,37 @@ class IDataFetcher(ABC):
     #             "requests_per_hour": int
     #         }
     #     """
-    #     pass 
+    #     pass
+
+class IParser(ABC):
+    """
+    Abstract base class for parsers.
+    
+    This interface defines the contract that all parsers must implement.
+    It provides a standardized way to parse data from various sources while
+    maintaining consistent error handling and response formats.
+    """
+
+    SUPPORTED_FORMATS = Literal["json", "markdown"]
+
+    @abstractmethod
+    def parse(self, file_path: str, output_format: SUPPORTED_FORMATS = "markdown") -> List[Document]:
+        """
+        Loads and parses a file from the given path into LangChain Documents.
+
+        Args:
+            file_path: The path to the file to parse
+            output_format: The format to output the parsed data in
+
+        Returns:
+            A list of LangChain Documents. Each Document typically contains 
+            a chunk of the parsed content, with the metadata containing the
+            original file path and other relevant information.
+
+        Raises:
+            ParserError: If the file cannot be parsed
+            FileNotFoundError: If the file does not exist
+        """
+        pass
+
+    

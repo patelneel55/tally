@@ -23,8 +23,8 @@ if __name__ == "__main__":
             
             # Fetch 8-K filings for Apple
             filings = await fetcher.fetch(
-                identifier="AAPL",
-                filing_type=FilingType.CURRENT_REPORT,
+                identifier="GOOG",
+                filing_type=FilingType.ANNUAL_REPORT,
                 data_format=DataFormat.HTML
             )
             
