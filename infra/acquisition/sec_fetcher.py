@@ -25,6 +25,7 @@ from datetime import date as Date
 from enum import Enum
 from infra.core.interfaces import IDataFetcher
 from infra.core.exceptions import ValidationError, DataFetchError
+import infra.acquisition as acquistion
 from pydantic import BaseModel, Field, field_validator
 import aiohttp
 import json
@@ -52,7 +53,7 @@ class DataFormat(str, Enum):
     PDF = "pdf"
 
 
-class SECFiling(BaseModel):
+class SECFiling(BaseModel, acquistion.AcquisitionOutput):
     """
     Represents an SEC filing document with associated metadata.
     
@@ -79,6 +80,30 @@ class SECFiling(BaseModel):
         if isinstance(value, str):
             return datetime.fromisoformat(value.replace('Z', '+00:00'))
         return value
+
+    def get_uris(self) -> List[str]:
+        """Return a list of URIs for the filing."""
+        uris = []
+        if self.documentURL:
+            uris.append(self.documentURL)
+        if self.textURL:
+            uris.append(self.textURL)
+        return uris
+    
+    def get_metadata(self) -> Dict[str, Any]:
+        """Return metadata for the filing."""
+        return {
+            "accessionNo": self.accessionNo,
+            "formType": self.formType,
+            "filing_date": self.filing_date.isoformat(),
+            "company_name": self.company_name,
+            "ticker": self.ticker,
+            "cik": self.cik,
+            "documentURL": self.documentURL,
+            "textURL": self.textURL,
+            "pdf_path": self.pdf_path,
+            "html_path": self.html_path
+        }
 
 
 class FilingRequest(BaseModel):
@@ -230,7 +255,7 @@ class EDGARFetcher(IDataFetcher):
         search_query = {
             "query": " AND ".join(query_parts),
             "from": "0",
-            "size": "10",
+            "size": "5",
             "sort": [{"filedAt": {"order": "desc"}}]
         }
         
