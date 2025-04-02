@@ -1,10 +1,11 @@
-import infra.core as core
+from infra.core.interfaces import IDocumentLoader
 from infra.acquisition.models import AcquisitionOutput
-from pydantic import List, BaseModel
+from pydantic import BaseModel
 from langchain_core.documents import Document
 from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
 from enum import Enum
 import logging
+from typing import List, Callable, Optional
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -19,9 +20,8 @@ class CrawlStrategy(str, Enum):
 class CrawlConfig(BaseModel):
     crawl_strategy: CrawlStrategy = CrawlStrategy.SAME_DOMAIN
     max_requests_per_crawl: int = 200
-    globs: List[str]
 
-class HTMLLoader(core.IDocumentLoader):
+class WebLoader(IDocumentLoader):
     """
     A simple HTML loader that loads HTML documents from a given path (URL or local path)
     and scrapes all HTML information from the target including recursively following HTML
@@ -38,31 +38,34 @@ class HTMLLoader(core.IDocumentLoader):
         """
         documents = []
 
-        def handle_page(url: str, content: str) -> None:
-            metadata = {
-                "source": url,
-                "content_type": "text/html"
-            }
-            documents.append(Document(
-                page_content=content,
-                metadata={
+        def process_urls(src: AcquisitionOutput) -> Callable[[str, str], None]:
+            """
+            Processes the URLs and returns a function to handle the page content.
+            """
+            def handle_page(url: str, content: str) -> None:
+                # Process the page content here
+                metadata = {
                     "source": url,
-                    "content_type": "text/html"
                 }
-            ))
+                metadata.update(src.get_metadata())
+                documents.append(Document(
+                    page_content=content,
+                    metadata=metadata
+                ))
+
+            return handle_page
 
         for source in sources:
             config = CrawlConfig(
                 crawl_strategy=crawl_strategy,
                 max_requests_per_crawl=200,
-                globs=[source.path]
             )
-            await self._crawl_url(source.get_uris(), config, handle_page)
+            await self._crawl_url(source.get_uris(), config, process_urls(source))
 
         return documents
         
 
-    async def _crawl_url(self, urls: List[str], config: CrawlConfig, handlePage: callable[[str, str], None]) -> None:
+    async def _crawl_url(self, urls: List[str], config: CrawlConfig, handlePage: Callable[[str, str], None]) -> None:
         """
         Crawls the URL and calls the handlePage function with the URL and content.
         """
@@ -74,12 +77,11 @@ class HTMLLoader(core.IDocumentLoader):
         async def request_handler(context: PlaywrightCrawlingContext) -> None:
             logging.debug(f'Processing {context.request.url}...')
             await context.page.wait_for_load_state('networkidle')
-            context.enqueue_links(
-                base_url=context.request.loadedUrl,
+            await context.enqueue_links(
+                base_url=context.request.loaded_url,
                 strategy=config.crawl_strategy,
-                globs=config.globs
             )
-            await handlePage(context.request.loadedUrl or "", await context.page.content())
+            handlePage(context.request.loaded_url or "", await context.page.content())
 
         await crawler.run(urls)
         logging.debug(f'Finished crawling {urls}.')

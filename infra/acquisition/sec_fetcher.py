@@ -86,8 +86,6 @@ class SECFiling(BaseModel, AcquisitionOutput):
         uris = []
         if self.documentURL:
             uris.append(self.documentURL)
-        if self.textURL:
-            uris.append(self.textURL)
         return uris
     
     def get_metadata(self) -> Dict[str, Any]:
@@ -216,12 +214,13 @@ class EDGARFetcher(IDataFetcher):
             processed_filings = self._filter_filings_by_date(processed_filings, request.date)
         
         # Process the filings based on requested data format
+        processed_filings = filings_data
         if request.data_format == DataFormat.PDF:
             # Download PDFs for filings
             processed_filings = await self._process_pdf_filings(filings_data)
-        else:
+        # else:
             # Get HTML content for filings
-            processed_filings = await self._process_html_filings(filings_data)
+            # processed_filings = await self._process_html_filings(filings_data)
             
         return processed_filings
 
@@ -346,7 +345,7 @@ class EDGARFetcher(IDataFetcher):
                     company_name=filing.get("companyName"),
                     ticker=filing.get("ticker"),
                     cik=filing.get("cik"),
-                    documentURL=doc_url,
+                    documentURL=self._convert_to_sec_gov_url(doc_url) ,
                     linkToTxt=filing.get("linkToTxt")
                 )
                 filings.append(filing_data)

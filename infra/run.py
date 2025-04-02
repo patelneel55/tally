@@ -3,7 +3,7 @@ import sys
 import logging
 from infra.acquisition.sec_fetcher import EDGARFetcher, FilingType, DataFormat
 from infra.parsers.pdf_parser import PDFParser
-from infra.ingestion.html_loader import HTMLLoader
+from infra.ingestion.web_loader import WebLoader
 from infra.acquisition.sec_fetcher import SECFiling
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Initialize the fetcher
 fetcher = EDGARFetcher()
 parser = PDFParser()
+loader = WebLoader()
 
 def parse_filing(filing):
     logger.info(f"Filing: {filing.formType} - {filing.filing_date} - {filing.accessionNo}")
@@ -28,34 +29,33 @@ def parse_filing(filing):
 if __name__ == "__main__":
     async def infra_run():
         ticker = "GS"
-        doc_type = FilingType.ANNUAL_REPORT
-        logger.info("Fetching {ticker} {doc_type} filings")
-
-        "https://www.sec.gov/ix?doc=/Archives/edgar/data/886982/000119312525012226/d910407d8k.htm"
-
-        source = SECF
-        loader = HTMLLoader()
+        doc_type = FilingType.CURRENT_REPORT
+        logger.info(f"Fetching {ticker} {doc_type.value} filings")
         
-        # try:
+        try:
             
-        #     # Fetch 8-K filings for Apple
-        #     filings = await fetcher.fetch(
-        #         identifier=ticker,
-        #         filing_type=FilingType.CURRENT_REPORT,
-        #         data_format=DataFormat.PDF
-        #     )
+            # Fetch 8-K filings for Apple
+            filings = await fetcher.fetch(
+                identifier=ticker,
+                filing_type=doc_type,
+                data_format=DataFormat.HTML
+            )
+            logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
+            
+            docs = await loader.load(filings, crawl_strategy="all")
+            print(f"Number of documents: {len(docs)}")
+            for doc in docs:
+                print(f"Metadata: {doc.metadata}\nSize: {len(doc.page_content)}\n\n")
+            # with Pool(processes=5) as pool:
+            #     try:
+            #         pool.map(parse_filing, filings)
+            #     except Exception as e:
+            #         logger.error(f"Error processing filing: {e}")
 
-        #     logger.info(f"Found {len(filings)} {doc_type} filings for {ticker}: {filings}")
-        #     # with Pool(processes=5) as pool:
-        #     #     try:
-        #     #         pool.map(parse_filing, filings)
-        #     #     except Exception as e:
-        #     #         logger.error(f"Error processing filing: {e}")
-
-        #     return None
-        # except Exception as e:
-        #     logger.error(f"Error fetching {ticker} {doc_type} filings: {e}")
-        #     raise
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching {ticker} {doc_type} filings: {e}")
+            raise
 
     # Run
     sys.exit(asyncio.run(infra_run()))
