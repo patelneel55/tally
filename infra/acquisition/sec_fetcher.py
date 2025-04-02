@@ -254,7 +254,7 @@ class EDGARFetcher(IDataFetcher):
         search_query = {
             "query": " AND ".join(query_parts),
             "from": "0",
-            "size": "5",
+            "size": "1",
             "sort": [{"filedAt": {"order": "desc"}}]
         }
         

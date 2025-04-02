@@ -3,6 +3,7 @@ from infra.acquisition.models import AcquisitionOutput
 from pydantic import BaseModel
 from langchain_core.documents import Document
 from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
+from crawlee import ConcurrencySettings
 from enum import Enum
 import logging
 from typing import List, Callable, Optional
@@ -71,6 +72,16 @@ class WebLoader(IDocumentLoader):
         """
         crawler = PlaywrightCrawler(
             max_requests_per_crawl=config.max_requests_per_crawl,
+            concurrency_settings=ConcurrencySettings(
+                # min_concurrency=1,
+                # max_concurrency=10,
+                 # Set the maximum number of tasks per minute
+                 # to avoid overloading the server
+                 #  100 tasks per minute
+                 #  100 tasks per minute
+                 #  100 tasks per minute
+                max_tasks_per_minute=600,
+            ),
         )
 
         @crawler.router.default_handler

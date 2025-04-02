@@ -3,10 +3,12 @@ import sys
 import logging
 from infra.acquisition.sec_fetcher import EDGARFetcher, FilingType, DataFormat
 from infra.parsers.pdf_parser import PDFParser
+from infra.parsers.html_parser import HTMLParser
 from infra.ingestion.web_loader import WebLoader
 from infra.acquisition.sec_fetcher import SECFiling
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
+import os
 
 # Set up logging
 logging.basicConfig(
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize the fetcher
 fetcher = EDGARFetcher()
-parser = PDFParser()
+parser = HTMLParser()
 loader = WebLoader()
 
 def parse_filing(filing):
@@ -29,7 +31,7 @@ def parse_filing(filing):
 if __name__ == "__main__":
     async def infra_run():
         ticker = "GS"
-        doc_type = FilingType.CURRENT_REPORT
+        doc_type = FilingType.ANNUAL_REPORT
         logger.info(f"Fetching {ticker} {doc_type.value} filings")
         
         try:
@@ -46,11 +48,38 @@ if __name__ == "__main__":
             print(f"Number of documents: {len(docs)}")
             for doc in docs:
                 print(f"Metadata: {doc.metadata}\nSize: {len(doc.page_content)}\n\n")
-            # with Pool(processes=5) as pool:
-            #     try:
-            #         pool.map(parse_filing, filings)
-            #     except Exception as e:
-            #         logger.error(f"Error processing filing: {e}")
+
+
+            # Write HTML to files
+            for doc in docs:
+                url_hash = hash(doc.metadata.get('source', 'unknown'))
+                output_path = f"cache/parsed_documents/{ticker}_{doc_type.value}_{url_hash}.html"
+                # Create directory if it doesn't exist
+                output_dir = os.path.dirname(output_path)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                
+                # Write all documents to the file
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(f"{doc.page_content}\n\n")
+                
+                logger.info(f"Document {doc.metadata.get('source', "unknown")} written to {output_path}")
+
+
+            documents = parser.parse(docs)
+            # Write markdown to files
+            for doc in documents:
+                url_hash = hash(doc.metadata.get('source', 'unknown'))
+                output_path = f"cache/parsed_documents/{ticker}_{doc_type.value}_{url_hash}.md"
+                # Create directory if it doesn't exist
+                output_dir = os.path.dirname(output_path)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                
+                # Write all documents to the file
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(f"{doc.page_content}\n\n")
+                logger.info(f"Document {doc.metadata.get('source', "unknown")} written to {output_path}")
 
             return None
         except Exception as e:

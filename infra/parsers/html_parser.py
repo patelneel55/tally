@@ -1,54 +1,87 @@
-# """
-# HTML Parser
-# ----------
+"""
+HTML Parser
+----------
 
-# This module provides functionality to parse HTML files into LangChain Documents
-# for processing in AI workflows. It leverages the sec-parser library to extract
-# structured data from SEC filings and converts them into a format suitable for
-# AI-powered analysis.
+This module provides functionality to parse HTML files into LangChain Documents
+for processing in AI workflows. It leverages the sec-parser library to extract
+structured data from SEC filings and converts them into a format suitable for
+AI-powered analysis.
 
-# The parser handles SEC filings in HTML format and converts them to a
-# standardized document format with appropriate metadata.
-# """
+The parser handles SEC filings in HTML format and converts them to a
+standardized document format with appropriate metadata.
+"""
 
-# import os
-# import logging
-# from typing import List, Dict, Any
-# from pathlib import Path
-# from langchain_core.documents import Document
-# import sec_parser as sp
-# from infra.core.interfaces import IParser
+import os
+import logging
+from typing import List, Dict, Any
+from pathlib import Path
+from langchain_core.documents import Document
+from infra.core.interfaces import IParser
+from infra.parsers.html_to_md.converter import convert_html_to_markdown
+from langchain_community.document_transformers import MarkdownifyTransformer
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-# class HTMLParser(IParser):
-#     """
-#     Parser for SEC filing HTML files.
+class HTMLParser(IParser):
+    """
+    Parser for SEC filing HTML files.
     
-#     This class implements the IParser interface to convert SEC filing HTML files
-#     into LangChain Documents. It uses the sec-parser library to extract structured
-#     data from SEC filings for AI analysis.
-#     """
+    This class implements the IParser interface to convert SEC filing HTML files
+    into LangChain Documents. It uses the sec-parser library to extract structured
+    data from SEC filings for AI analysis.
+    """
     
-#     def __init__(self):
-#         """Initialize the HTML parser."""
-#         pass
+    def __init__(self):
+        """Initialize the HTML parser."""
+        pass
     
-#     def parse(self, file_path: str, output_format: IParser.SUPPORTED_FORMATS = "markdown") -> List[Document]:
-#         """
-#         Parse an SEC filing HTML file into LangChain Documents.
+    def parse(self, docs: List[Document], output_format: IParser.SUPPORTED_FORMATS = "markdown") -> List[Document]:
+        """
+        Parse an SEC filing HTML file into LangChain Documents.
         
-#         Args:
-#             file_path: Path to the HTML file
-#             output_format: Format to output the parsed data in
+        Args:
+            file_path: Path to the HTML file
+            output_format: Format to output the parsed data in
             
-#         Returns:
-#             List of LangChain Documents with structured SEC filing data
+        Returns:
+            List of LangChain Documents with structured SEC filing data
             
-#         Raises:
-#             FileNotFoundError: If the file does not exist
-#             ParserError: If the file cannot be parsed
-#         """
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ParserError: If the file cannot be parsed
+        """
+        md = MarkdownifyTransformer()
+        new_docs = md.transform_documents(docs)
+        return new_docs
+
+    def write_file(self, documents: List[Document], output_path: str) -> None:
+        """
+        Write the page content of all documents to a file.
+        
+        Args:
+            documents: List of Document objects to write
+            output_path: Path to the output file
+            
+        Returns:
+            None
+        """
+        try:
+            logger.info(f"Writing {len(documents)} documents to {output_path}")
+            
+            # Create directory if it doesn't exist
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # Write all documents to the file
+            with open(output_path, "w", encoding="utf-8") as f:
+                for doc in documents:
+                    f.write(f"{doc.page_content}\n\n")
+            
+            logger.info(f"Successfully wrote {len(documents)} documents to {output_path}")
+        except Exception as e:
+            logger.error(f"Error writing documents to file: {e}")
+            raise
 #         if not os.path.exists(file_path):
 #             raise FileNotFoundError(f"HTML file not found: {file_path}")
         
