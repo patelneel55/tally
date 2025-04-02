@@ -154,7 +154,7 @@ class IParser(ABC):
     SUPPORTED_FORMATS = Literal["json", "markdown"]
 
     @abstractmethod
-    def parse(self, file_path: str, output_format: SUPPORTED_FORMATS = "markdown") -> List[Document]:
+    def parse(self, docs: List[Document], output_format: SUPPORTED_FORMATS = "markdown") -> List[Document]:
         """
         Loads and parses a file from the given path into LangChain Documents.
 
