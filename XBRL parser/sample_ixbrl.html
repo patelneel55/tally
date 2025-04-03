@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:ix="http://www.xbrl.org/2013/inlineXBRL" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Sample iXBRL Document</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <div class="report-header">
+        <h1>Sample Financial Report</h1>
+        <p>For the period ending <ix:nonNumeric name="period:endDate" contextRef="duration">December 31, 2023</ix:nonNumeric></p>
+    </div>
+
+    <div class="company-info">
+        <h2><ix:nonNumeric name="entity:legalEntityName" contextRef="instant">Acme Corporation</ix:nonNumeric></h2>
+        <p>Industry: <ix:nonNumeric name="entity:industryCategory" contextRef="instant">Technology</ix:nonNumeric></p>
+    </div>
+
+    <div class="financial-highlights">
+        <h2>Financial Highlights</h2>
+        <table border="1">
+            <tr>
+                <th>Metric</th>
+                <th>Amount</th>
+            </tr>
+            <tr>
+                <td>Revenue</td>
+                <td><ix:nonFraction name="company:Revenue" contextRef="duration" unitRef="USD" decimals="0" format="ixt:numdotdecimal">10,500,000</ix:nonFraction></td>
+            </tr>
+            <tr>
+                <td>Net Income</td>
+                <td><ix:nonFraction name="company:NetIncome" contextRef="duration" unitRef="USD" decimals="0" format="ixt:numdotdecimal">1,250,000</ix:nonFraction></td>
+            </tr>
+            <tr>
+                <td>Total Assets</td>
+                <td><ix:nonFraction name="company:TotalAssets" contextRef="instant" unitRef="USD" decimals="0" format="ixt:numdotdecimal">25,750,000</ix:nonFraction></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="management-discussion">
+        <h2>Management Discussion and Analysis</h2>
+        <p><ix:nonNumeric name="management:discussion" contextRef="duration">
+            The company has performed strongly this year with revenue growth of 
+            <ix:nonFraction name="company:RevenueGrowth" contextRef="duration" unitRef="PURE" decimals="2" format="ixt:numdotdecimal" scale="0">0.15</ix:nonFraction>% 
+            compared to the previous year. We continue to invest in R&D to maintain our competitive advantage.
+        </ix:nonNumeric></p>
+    </div>
+</body>
+</html> 
