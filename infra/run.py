@@ -6,6 +6,8 @@ from infra.parsers.pdf_parser import PDFParser
 from infra.parsers.html_parser import HTMLParser
 from infra.preprocessing.sec_parser import SECParser, SECSplitter
 from infra.ingestion.web_loader import WebLoader
+from infra.embeddings.providers import OpenAIEmbeddingProvider
+from infra.vector_stores.chromadb import ChromaVectorStore
 from infra.preprocessing.markdown_splitter import MarkdownSplitter
 from infra.acquisition.sec_fetcher import SECFiling
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,7 +42,7 @@ def save_docs(docs, step, ticker, doc_type: FilingType, ext):
 if __name__ == "__main__":
     async def infra_run():
         ticker = "GS"
-        doc_type = FilingType.QUARTERLY_REPORT
+        doc_type = FilingType.CURRENT_REPORT
         logger.info(f"Fetching {ticker} {doc_type.value} filings")
         
         try:
@@ -48,6 +50,8 @@ if __name__ == "__main__":
             loader = WebLoader(crawl_strategy="all", max_crawl_depth=0)
             parser = SECParser()
             splitter = SECSplitter()
+            embeddings = OpenAIEmbeddingProvider()
+            vector_store = ChromaVectorStore()
             
             # Fetch filings
             filings = await fetcher.fetch(
@@ -61,7 +65,6 @@ if __name__ == "__main__":
             print(f"Number of documents: {len(docs)}")
             save_docs(docs, "load", ticker, doc_type, "html")
 
-
             documents = parser.parse(docs)
             print(f"Number of documents: {len(documents)}")
             save_docs(documents, "parse", ticker, doc_type, "md")
@@ -70,6 +73,13 @@ if __name__ == "__main__":
             print(f"Number of documents: {len(split_docs)}")
             save_docs(split_docs, "split", ticker, doc_type, "md")
 
+            embedding_model = embeddings.get_embedding_model()
+            vector_store.add_documents(split_docs, embedding_model)
+            print(f"Number of documents: {len(split_docs)}")
+
+            retriever = vector_store.as_retriever(embeddings=embedding_model)
+            retrieved_docs = retriever.invoke("What position was John Walter appointed to?")
+            save_docs(retrieved_docs, "retrieve", ticker, doc_type, "md")
             return None
         except Exception as e:
             logger.error(f"Error fetching {ticker} {doc_type.value} filings: {e}")

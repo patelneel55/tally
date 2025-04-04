@@ -1,11 +1,13 @@
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings # Example
-from core.interfaces import IEmbeddingProvider
+from infra.core.interfaces import IEmbeddingProvider
 from langchain_core.embeddings import Embeddings
 import os
 
+from infra.embeddings.models import OpenAIEmbeddingModels
+
 class OpenAIEmbeddingProvider(IEmbeddingProvider):
-    def __init__(self, model: str = "text-embedding-3-small", api_key: str = None):
+    def __init__(self, model: str = OpenAIEmbeddingModels.SMALL3, api_key: str = None):
         self.model = model
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
