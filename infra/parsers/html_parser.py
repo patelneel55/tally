@@ -14,11 +14,13 @@ standardized document format with appropriate metadata.
 import os
 import logging
 from typing import List, Dict, Any
+import warnings
 from pathlib import Path
 from langchain_core.documents import Document
 from infra.core.interfaces import IParser
-from infra.parsers.html_to_md.converter import convert_html_to_markdown
 from langchain_community.document_transformers import MarkdownifyTransformer
+# from docling.document_converter import DocumentConverter
+import sec_parser as sp
 
 logger = logging.getLogger(__name__)
 

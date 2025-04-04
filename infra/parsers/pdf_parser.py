@@ -18,6 +18,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 import pymupdf4llm
 from infra.core.interfaces import IParser
+# from docling.document_converter import DocumentConverter 
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,26 @@ class PDFParser(IParser):
         }
         
         return metadata
+
+    # def _parse_as_markdown_docling(self, file_path: str, metadata: Dict[str, Any]) -> List[Document]:
+    #     """
+    #     Parse PDF to markdown-formatted
+    #     documents using DocLing.
+    #     """
+    #     converter = DocumentConverter()
+    #     result = converter.convert(file_path)
+    #     doc = Document(
+    #         page_content=result.document.export_to_markdown(),
+    #         metadata={
+    #             "source": file_path,
+    #             "file_name": os.path.basename(file_path),
+    #             "file_type": "pdf",
+    #             "file_path": str(Path(file_path).absolute()),
+    #             "file_size": os.path.getsize(file_path),
+    #             "last_modified": os.path.getmtime(file_path),
+    #         },
+    #     )
+    #     return [doc]
     
     def _parse_as_markdown(self, file_path: str, metadata: Dict[str, Any]) -> List[Document]:
         """

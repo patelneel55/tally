@@ -21,6 +21,7 @@ class CrawlStrategy(str, Enum):
 class CrawlConfig(BaseModel):
     crawl_strategy: CrawlStrategy = CrawlStrategy.SAME_DOMAIN
     max_requests_per_crawl: int = 200
+    max_crawl_depth: int = 1
 
 class WebLoader(IDocumentLoader):
     """
@@ -29,10 +30,18 @@ class WebLoader(IDocumentLoader):
     links.
 
     """
-    def __init__(self):
+    def __init__(self, crawl_strategy: CrawlStrategy = CrawlStrategy.SAME_DOMAIN, max_requests_per_crawl: int = 200, max_crawl_depth: int = 1):
+        """
+        Initializes the WebLoader with the specified crawl strategy and maximum requests per crawl.
+        """
+        self._config = CrawlConfig(
+            crawl_strategy=crawl_strategy,
+            max_requests_per_crawl=max_requests_per_crawl,
+            max_crawl_depth=max_crawl_depth
+        )
         pass
 
-    async def load(self, sources: List[AcquisitionOutput], crawl_strategy = CrawlStrategy.SAME_DOMAIN) -> List[Document]:
+    async def load(self, sources: List[AcquisitionOutput]) -> List[Document]:
         """
         Loads the HTML document from the specified sources and returns a list of
         Document objects.
@@ -57,11 +66,7 @@ class WebLoader(IDocumentLoader):
             return handle_page
 
         for source in sources:
-            config = CrawlConfig(
-                crawl_strategy=crawl_strategy,
-                max_requests_per_crawl=200,
-            )
-            await self._crawl_url(source.get_uris(), config, process_urls(source))
+            await self._crawl_url(source.get_uris(), self._config, process_urls(source))
 
         return documents
         
@@ -72,6 +77,7 @@ class WebLoader(IDocumentLoader):
         """
         crawler = PlaywrightCrawler(
             max_requests_per_crawl=config.max_requests_per_crawl,
+            max_crawl_depth=config.max_crawl_depth,
             concurrency_settings=ConcurrencySettings(
                 # min_concurrency=1,
                 # max_concurrency=10,
