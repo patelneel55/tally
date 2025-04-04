@@ -4,7 +4,7 @@ import logging
 from infra.acquisition.sec_fetcher import EDGARFetcher, FilingType, DataFormat
 from infra.parsers.pdf_parser import PDFParser
 from infra.parsers.html_parser import HTMLParser
-from infra.parsers.sec_parser import SECParser
+from infra.preprocessing.sec_parser import SECParser, SECSplitter
 from infra.ingestion.web_loader import WebLoader
 from infra.preprocessing.markdown_splitter import MarkdownSplitter
 from infra.acquisition.sec_fetcher import SECFiling
@@ -40,13 +40,14 @@ def save_docs(docs, step, ticker, doc_type: FilingType, ext):
 if __name__ == "__main__":
     async def infra_run():
         ticker = "GS"
-        doc_type = FilingType.CURRENT_REPORT
+        doc_type = FilingType.QUARTERLY_REPORT
         logger.info(f"Fetching {ticker} {doc_type.value} filings")
         
         try:
             fetcher = EDGARFetcher()
-            loader = WebLoader(crawl_strategy="all", max_crawl_depth=1)
+            loader = WebLoader(crawl_strategy="all", max_crawl_depth=0)
             parser = SECParser()
+            splitter = SECSplitter()
             
             # Fetch filings
             filings = await fetcher.fetch(
@@ -65,9 +66,13 @@ if __name__ == "__main__":
             print(f"Number of documents: {len(documents)}")
             save_docs(documents, "parse", ticker, doc_type, "md")
 
+            split_docs = splitter.split_documents(documents)
+            print(f"Number of documents: {len(split_docs)}")
+            save_docs(split_docs, "split", ticker, doc_type, "md")
+
             return None
         except Exception as e:
-            logger.error(f"Error fetching {ticker} {doc_type} filings: {e}")
+            logger.error(f"Error fetching {ticker} {doc_type.value} filings: {e}")
             raise
 
     # Run
