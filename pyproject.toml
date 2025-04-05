@@ -14,7 +14,7 @@ dynamic = ["dependencies"]
 [tools.setuptools.dynamic]
 dependencies = { file = ["requirements.in"] }
 
-[project.optional.dependencies]
+[project.optional-dependencies]
 dev = [
     "pip-tools",
     "tox",
@@ -31,7 +31,11 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [tools.setuptools]
-packages = ["analystai"]
+packages = ["infra"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["infra*"]
 
 [tool.isort]
 profile = "black"
