@@ -1,0 +1,37 @@
+[project]
+name = "analystai"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.11.1"
+authors = [
+    { name = "Neel Patel", email = "patelneel55@gmail.com" },
+    { name = "Vebz Chutani", email = "vbvchutani@gmail.com" },
+]
+license = { file = "LICENSE" }
+dynamic = ["dependencies"]
+
+[tools.setuptools.dynamic]
+dependencies = { file = ["requirements.in"] }
+
+[project.optional.dependencies]
+dev = [
+    "pip-tools",
+    "tox",
+    "pre-commit",
+    "flake8",
+    "black",
+    "isort",
+    "pytest",
+    "pipreqs"
+]
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tools.setuptools]
+packages = ["analystai"]
+
+[tool.isort]
+profile = "black"

@@ -1,19 +1,27 @@
+from typing import Any, Dict, List
+
 from core.interfaces import (
-    IPromptStrategy, ILLMProvider, IOutputFormatter, IVectorStore, IEmbeddingProvider
+    IEmbeddingProvider,
+    ILLMProvider,
+    IOutputFormatter,
+    IPromptStrategy,
+    IVectorStore,
 )
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 from langchain_core.documents import Document
-from typing import Dict, Any, List
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+
 
 class RAGFinancialAnalysisPipeline:
-    def __init__(self,
-                 prompt_strategy: IPromptStrategy, # Assumes a RAG-compatible strategy
-                 llm_provider: ILLMProvider,
-                 output_formatter: IOutputFormatter,
-                 vector_store: IVectorStore,
-                 embedding_provider: IEmbeddingProvider,
-                 retriever_search_type: str = "similarity",
-                 retriever_search_kwargs: Dict[str, Any] = None):
+    def __init__(
+        self,
+        prompt_strategy: IPromptStrategy,  # Assumes a RAG-compatible strategy
+        llm_provider: ILLMProvider,
+        output_formatter: IOutputFormatter,
+        vector_store: IVectorStore,
+        embedding_provider: IEmbeddingProvider,
+        retriever_search_type: str = "similarity",
+        retriever_search_kwargs: Dict[str, Any] = None,
+    ):
 
         self.prompt_strategy = prompt_strategy
         self.llm = llm_provider.get_model()
@@ -22,7 +30,7 @@ class RAGFinancialAnalysisPipeline:
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
         self.retriever_search_type = retriever_search_type
-        self.retriever_search_kwargs = retriever_search_kwargs or {"k": 4} # Default k
+        self.retriever_search_kwargs = retriever_search_kwargs or {"k": 4}  # Default k
 
     def run(self, task_description: str, prompt_context: Dict[str, Any] = None) -> str:
         print(f"Starting RAG pipeline for task: {task_description}")
@@ -33,7 +41,7 @@ class RAGFinancialAnalysisPipeline:
         retriever = self.vector_store.as_retriever(
             embeddings=embeddings,
             search_type=self.retriever_search_type,
-            search_kwargs=self.retriever_search_kwargs
+            search_kwargs=self.retriever_search_kwargs,
         )
 
         # 2. Create Prompt Template (expects 'retrieved_context' and 'question')
@@ -41,8 +49,8 @@ class RAGFinancialAnalysisPipeline:
         # We pass None for retrieved_docs here because the RAG chain will fetch them
         prompt_template = self.prompt_strategy.create_prompt(
             context=prompt_context,
-            task_description=task_description, # Used by strategy if needed
-            retrieved_docs=None # RAG chain handles retrieval
+            task_description=task_description,  # Used by strategy if needed
+            retrieved_docs=None,  # RAG chain handles retrieval
         )
 
         # 3. Define RAG Chain using LCEL
@@ -51,12 +59,15 @@ class RAGFinancialAnalysisPipeline:
         rag_chain = (
             # Parallel Runnable: gets context via retriever, passes question through
             RunnableParallel(
-                {"retrieved_context": retriever | format_docs, "question": RunnablePassthrough()}
+                {
+                    "retrieved_context": retriever | format_docs,
+                    "question": RunnablePassthrough(),
+                }
             )
-            | prompt_template # Fills template with context and question
-            | self.llm          # Sends filled prompt to LLM
-            | self.output_parser # Parses LLM response
-            | self.formatter.format # Formats the parsed data (custom method) - needs slight adjustment if parser returns non-dict
+            | prompt_template  # Fills template with context and question
+            | self.llm  # Sends filled prompt to LLM
+            | self.output_parser  # Parses LLM response
+            | self.formatter.format  # Formats the parsed data (custom method) - needs slight adjustment if parser returns non-dict
         )
 
         # If formatter.format expects the direct parsed output:
@@ -70,10 +81,12 @@ class RAGFinancialAnalysisPipeline:
         print("RAG pipeline finished.")
         return final_result
 
+
 # --- Helper function for formatting docs ---
 def format_docs(docs: List[Document]) -> str:
     """Helper function to format retrieved documents for the prompt context."""
     return "\n\n".join(doc.page_content for doc in docs)
+
 
 # In main.py or elsewhere:
 # ... (initialize components as before, plus EmbeddingProvider, VectorStore)

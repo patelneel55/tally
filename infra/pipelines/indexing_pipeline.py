@@ -1,14 +1,21 @@
 from core.interfaces import (
-    IDataFetcher, IParser, ISplitter, IEmbeddingProvider, IVectorStore
+    IDataFetcher,
+    IEmbeddingProvider,
+    IParser,
+    ISplitter,
+    IVectorStore,
 )
 
+
 class IndexingPipeline:
-    def __init__(self,
-                 loader: IDataFetcher,
-                 parser: IParser,
-                 splitter: ISplitter,
-                 embedding_provider: IEmbeddingProvider,
-                 vector_store: IVectorStore):
+    def __init__(
+        self,
+        loader: IDataFetcher,
+        parser: IParser,
+        splitter: ISplitter,
+        embedding_provider: IEmbeddingProvider,
+        vector_store: IVectorStore,
+    ):
         self.loader = loader
         self.parser = parser
         self.splitter = splitter

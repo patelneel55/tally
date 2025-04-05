@@ -1,5 +1,6 @@
 import abc
 
+
 class AcquisitionOutput(abc.ABC):
     """
     Abstract base class for acquisition outputs.

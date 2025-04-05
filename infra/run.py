@@ -1,53 +1,64 @@
-import pysqlite3
 import sys
+
+import pysqlite3
+
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 import asyncio
-import sys
 import logging
-from infra.acquisition.sec_fetcher import EDGARFetcher, FilingType, DataFormat
-from infra.parsers.pdf_parser import PDFParser
-from infra.parsers.html_parser import HTMLParser
-from infra.preprocessing.sec_parser import SECParser, SECSplitter
-from infra.ingestion.web_loader import WebLoader
-from infra.embeddings.providers import OpenAIEmbeddingProvider
-from infra.vector_stores.chromadb import ChromaVectorStore
-from infra.preprocessing.markdown_splitter import MarkdownSplitter
-from infra.acquisition.sec_fetcher import SECFiling
+import os
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
-import os
+
+from infra.acquisition.sec_fetcher import (
+    DataFormat,
+    EDGARFetcher,
+    FilingType,
+    SECFiling,
+)
+from infra.embeddings.providers import OpenAIEmbeddingProvider
+from infra.ingestion.web_loader import WebLoader
+from infra.parsers.html_parser import HTMLParser
+from infra.parsers.pdf_parser import PDFParser
+from infra.preprocessing.markdown_splitter import MarkdownSplitter
+from infra.preprocessing.sec_parser import SECParser, SECSplitter
+from infra.vector_stores.chromadb import ChromaVectorStore
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def save_docs(docs, step, ticker, doc_type: FilingType, ext):
     """
     Save the documents to a specified location.
     """
     for i, doc in enumerate(docs):
-        url_hash = hash(doc.metadata.get('source', 'unknown'))
+        url_hash = hash(doc.metadata.get("source", "unknown"))
         output_path = f"cache/saved_documents/{step}/{ticker}_{doc_type.value}_{url_hash}_{i}.{ext}"
         # Create directory if it doesn't exist
         output_dir = os.path.dirname(output_path)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
-        
+
         # Write all documents to the file
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(f"{doc.page_content}\n\n")
-        
-        logger.info(f"Document {doc.metadata.get('source', 'unknown')}, index {i} written to {output_path}")
+
+        logger.info(
+            f"Document {doc.metadata.get('source', 'unknown')}, index {i} written to {output_path}"
+        )
+
 
 if __name__ == "__main__":
+
     async def infra_run():
         ticker = "GS"
         doc_type = FilingType.QUARTERLY_REPORT
         logger.info(f"Fetching {ticker} {doc_type.value} filings")
-        
+
         try:
             fetcher = EDGARFetcher()
             loader = WebLoader(crawl_strategy="all", max_crawl_depth=0)
@@ -55,33 +66,43 @@ if __name__ == "__main__":
             splitter = SECSplitter()
             embeddings = OpenAIEmbeddingProvider()
             vector_store = ChromaVectorStore()
-            
-            # Fetch filings
-            filings = await fetcher.fetch(
-                identifier=ticker,
-                filing_type=doc_type,
-                data_format=DataFormat.HTML
-            )
-            logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
-            
-            docs = await loader.load(filings)
-            print(f"Number of documents: {len(docs)}")
-            save_docs(docs, "load", ticker, doc_type, "html")
 
-            documents = parser.parse(docs)
-            print(f"Number of documents: {len(documents)}")
-            save_docs(documents, "parse", ticker, doc_type, "md")
+            # # Fetch filings
+            # filings = await fetcher.fetch(
+            #     identifier=ticker,
+            #     filing_type=doc_type,
+            #     data_format=DataFormat.HTML
+            # )
+            # logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
 
-            split_docs = splitter.split_documents(documents)
-            print(f"Number of documents: {len(split_docs)}")
-            save_docs(split_docs, "split", ticker, doc_type, "md")
+            # docs = await loader.load(filings)
+            # print(f"Number of documents: {len(docs)}")
+            # save_docs(docs, "load", ticker, doc_type, "html")
+
+            # documents = parser.parse(docs)
+            # print(f"Number of documents: {len(documents)}")
+            # save_docs(documents, "parse", ticker, doc_type, "md")
+
+            # split_docs = splitter.split_documents(documents)
+            # print(f"Number of documents: {len(split_docs)}")
+            # save_docs(split_docs, "split", ticker, doc_type, "md")
 
             embedding_model = embeddings.get_embedding_model()
-            vector_store.add_documents(split_docs, embedding_model)
-            print(f"Number of documents: {len(split_docs)}")
+            # vector_store.add_documents(split_docs, embedding_model)
+            # print(f"Number of documents: {len(split_docs)}")
 
-            retriever = vector_store.as_retriever(embeddings=embedding_model)
-            retrieved_docs = retriever.invoke("What is the consolidated cash and cash equivalents for December 2023?")
+            retriever = vector_store.as_retriever(
+                embeddings=embedding_model,
+                search_kwargs={
+                    "k": 5,
+                    # "filter": {
+                    #     "type": "TableElement"
+                    # },
+                },
+            )
+            retrieved_docs = retriever.invoke(
+                "How does Goldman Sachs make money from market making activities?"
+            )
             save_docs(retrieved_docs, "retrieve", ticker, doc_type, "md")
             return None
         except Exception as e:

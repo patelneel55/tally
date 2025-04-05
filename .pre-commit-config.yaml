@@ -1,0 +1,19 @@
+default_stages: [pre-push]
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+  - id: mixed-line-ending
+  - id: fix-byte-order-marker
+  - id: check-executables-have-shebangs
+  - id: debug-statements
+  - id: check-yaml
+    files: .*\.(yaml|yml)$
+- repo: https://github.com/commitizen-tools/commitizen
+  rev: 04ac8deea8bc06610bfbc409495f61579669353c
+  hooks:
+  - id: commitizen
+    name: Git Commit Message
+    stages: [commit-msg]

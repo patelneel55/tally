@@ -1,0 +1,7 @@
+[flake8]
+# Matching black's default
+max-line-length = 88
+max-complexity = 10
+
+extend-select =
+    8950

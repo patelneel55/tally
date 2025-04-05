@@ -8,7 +8,8 @@ PDF files into LangChain Documents.
 import os
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from langchain_core.documents import Document
 
 from infra.parsers.pdf_parser import PDFParser
@@ -67,24 +68,24 @@ class TestPDFParser(unittest.TestCase):
                 "metadata": {
                     "page_number": 1,
                     "page_count": 2,
-                    "file_path": "data/test.pdf"
+                    "file_path": "data/test.pdf",
                 },
                 "text": "# Page 1\n\nSample text content",
                 "tables": [{"bbox": (0, 0, 100, 100), "row_count": 3, "col_count": 4}],
                 "images": [{"name": "image1", "bbox": (0, 0, 50, 50)}],
-                "graphics": [{"bbox": (0, 0, 30, 30)}]
+                "graphics": [{"bbox": (0, 0, 30, 30)}],
             },
             {
                 "metadata": {
                     "page_number": 2,
                     "page_count": 2,
-                    "file_path": "data/test.pdf"
+                    "file_path": "data/test.pdf",
                 },
                 "text": "# Page 2\n\nMore sample content",
                 "tables": [],
                 "images": [],
-                "graphics": []
-            }
+                "graphics": [],
+            },
         ]
 
         # Run the method
@@ -122,13 +123,18 @@ class TestPDFParser(unittest.TestCase):
     @patch("os.path.exists", return_value=True)
     @patch.object(PDFParser, "_parse_as_markdown")
     @patch.object(PDFParser, "_extract_file_metadata")
-    def test_parse_full_flow(self, mock_extract_metadata, mock_parse_as_markdown, mock_exists):
+    def test_parse_full_flow(
+        self, mock_extract_metadata, mock_parse_as_markdown, mock_exists
+    ):
         """Test the full parsing flow."""
         # Configure the mocks
-        mock_extract_metadata.return_value = {"source": "test.pdf", "file_name": "test.pdf"}
+        mock_extract_metadata.return_value = {
+            "source": "test.pdf",
+            "file_name": "test.pdf",
+        }
         mock_parse_as_markdown.return_value = [
             Document(page_content="Test content 1", metadata={"page": 1}),
-            Document(page_content="Test content 2", metadata={"page": 2})
+            Document(page_content="Test content 2", metadata={"page": 2}),
         ]
 
         # Run the parse method
@@ -138,11 +144,13 @@ class TestPDFParser(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].page_content, "Test content 1")
         self.assertEqual(result[1].page_content, "Test content 2")
-        
+
         # Verify the methods were called with the right arguments
         mock_extract_metadata.assert_called_once_with("test.pdf")
-        mock_parse_as_markdown.assert_called_once_with("test.pdf", {"source": "test.pdf", "file_name": "test.pdf"})
+        mock_parse_as_markdown.assert_called_once_with(
+            "test.pdf", {"source": "test.pdf", "file_name": "test.pdf"}
+        )
 
 
 if __name__ == "__main__":
-    unittest.main() 
+    unittest.main()

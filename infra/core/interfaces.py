@@ -6,65 +6,67 @@ This module defines the core interfaces used throughout the infrastructure
 layer. These interfaces establish the contract that all concrete implementations
 must follow.
 """
+
 import abc
 from abc import ABC, abstractmethod
+from datetime import date, datetime
 from typing import Any, Dict, List, Literal, Optional, Union
-from langchain_core.documents import Document
+
 # Import base types from LangChain for interoperability
 from langchain_core.documents import Document
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import BasePromptTemplate
-from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.embeddings import Embeddings
-from langchain_core.vectorstores import VectorStore
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.prompts import BasePromptTemplate
 from langchain_core.retrievers import BaseRetriever
-from datetime import datetime, date
+from langchain_core.vectorstores import VectorStore
+
 
 class IDataFetcher(ABC):
     """
     Abstract base class for data fetchers.
-    
+
     This interface defines the contract that all data fetchers must implement.
     It provides a standardized way to fetch data from various sources while
     maintaining consistent error handling and response formats.
     """
-    
+
     @abstractmethod
     async def fetch(self, identifier: str, **kwargs) -> Any:
         """
         Fetch data for a given identifier.
-        
+
         Args:
             identifier: Unique identifier for the data to fetch (e.g., ticker symbol)
             **kwargs: Additional parameters specific to the data source
-            
+
         Returns:
             The fetched data in a standardized format
-            
+
         Raises:
             DataFetchError: If the data cannot be fetched
             ValidationError: If the input parameters are invalid
         """
         pass
-    
+
     # @abstractmethod
     # async def fetch_batch(self, identifiers: List[str], **kwargs) -> Dict[str, Any]:
     #     """
     #     Fetch data for multiple identifiers in parallel.
-        
+
     #     Args:
     #         identifiers: List of unique identifiers
     #         **kwargs: Additional parameters specific to the data source
-            
+
     #     Returns:
     #         Dictionary mapping identifiers to their fetched data
-            
+
     #     Raises:
     #         DataFetchError: If any of the data cannot be fetched
     #         ValidationError: If the input parameters are invalid
     #     """
     #     pass
-    
+
     # @abstractmethod
     # async def fetch_historical(
     #     self,
@@ -75,40 +77,40 @@ class IDataFetcher(ABC):
     # ) -> List[Any]:
     #     """
     #     Fetch historical data for a given identifier.
-        
+
     #     Args:
     #         identifier: Unique identifier for the data to fetch
     #         start_date: Start date for historical data
     #         end_date: End date for historical data
     #         **kwargs: Additional parameters specific to the data source
-            
+
     #     Returns:
     #         List of historical data points
-            
+
     #     Raises:
     #         DataFetchError: If the historical data cannot be fetched
     #         ValidationError: If the input parameters are invalid
     #     """
     #     pass
-    
+
     # @abstractmethod
     # def validate_identifier(self, identifier: str) -> bool:
     #     """
     #     Validate if an identifier is in the correct format.
-        
+
     #     Args:
     #         identifier: Identifier to validate
-            
+
     #     Returns:
     #         True if the identifier is valid, False otherwise
     #     """
     #     pass
-    
+
     # @abstractmethod
     # def get_rate_limit(self) -> Dict[str, int]:
     #     """
     #     Get the rate limits for this data fetcher.
-        
+
     #     Returns:
     #         Dictionary containing rate limit information:
     #         {
@@ -119,11 +121,13 @@ class IDataFetcher(ABC):
     #     """
     #     pass
 
+
 class IDocumentLoader(ABC):
     """
     Interface for loading data from a specific URI into LangChain
     Document objects.
     """
+
     @abstractmethod
     async def load(self, source: List[Any]) -> List[Document]:
         """
@@ -142,10 +146,11 @@ class IDocumentLoader(ABC):
         """
         pass
 
+
 class IParser(ABC):
     """
     Abstract base class for parsers.
-    
+
     This interface defines the contract that all parsers must implement.
     It provides a standardized way to parse data from various sources while
     maintaining consistent error handling and response formats.
@@ -154,7 +159,9 @@ class IParser(ABC):
     SUPPORTED_FORMATS = Literal["json", "markdown"]
 
     @abstractmethod
-    def parse(self, docs: List[Document], output_format: SUPPORTED_FORMATS = "markdown") -> List[Document]:
+    def parse(
+        self, docs: List[Document], output_format: SUPPORTED_FORMATS = "markdown"
+    ) -> List[Document]:
         """
         Loads and parses a file from the given path into LangChain Documents.
 
@@ -163,7 +170,7 @@ class IParser(ABC):
             output_format: The format to output the parsed data in
 
         Returns:
-            A list of LangChain Documents. Each Document typically contains 
+            A list of LangChain Documents. Each Document typically contains
             a chunk of the parsed content, with the metadata containing the
             original file path and other relevant information.
 
@@ -172,6 +179,7 @@ class IParser(ABC):
             FileNotFoundError: If the file does not exist
         """
         pass
+
 
 class ISplitter(abc.ABC):
     """Interface for splitting documents into smaller chunks."""
@@ -213,20 +221,20 @@ class IVectorStore(abc.ABC):
 
     @abc.abstractmethod
     def get_vectorstore(self, embeddings: Embeddings) -> VectorStore:
-         """
-         Gets or initializes the underlying LangChain VectorStore instance,
-         configured with the provided embedding function.
+        """
+        Gets or initializes the underlying LangChain VectorStore instance,
+        configured with the provided embedding function.
 
-         Args:
-            embeddings: The LangChain Embeddings object to use.
+        Args:
+           embeddings: The LangChain Embeddings object to use.
 
-         Returns:
-             A configured LangChain VectorStore instance.
+        Returns:
+            A configured LangChain VectorStore instance.
 
-         Raises:
-             VectorStoreError: If the vector store cannot be accessed or initialized.
-         """
-         pass
+        Raises:
+            VectorStoreError: If the vector store cannot be accessed or initialized.
+        """
+        pass
 
     @abc.abstractmethod
     def add_documents(self, documents: List[Document], embeddings: Embeddings):
@@ -244,7 +252,12 @@ class IVectorStore(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def as_retriever(self, embeddings: Embeddings, search_type: str = "similarity", search_kwargs: Optional[Dict[str, Any]] = None) -> BaseRetriever:
+    def as_retriever(
+        self,
+        embeddings: Embeddings,
+        search_type: str = "similarity",
+        search_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> BaseRetriever:
         """
         Returns a LangChain retriever configured for this vector store.
 
@@ -266,11 +279,12 @@ class IPromptStrategy(abc.ABC):
     """Interface for creating LLM prompts based on different strategies."""
 
     @abc.abstractmethod
-    def create_prompt(self,
-                      context: Dict[str, Any],
-                      task_description: str,
-                      retrieved_docs: Optional[List[Document]] = None
-                     ) -> BasePromptTemplate:
+    def create_prompt(
+        self,
+        context: Dict[str, Any],
+        task_description: str,
+        retrieved_docs: Optional[List[Document]] = None,
+    ) -> BasePromptTemplate:
         """
         Creates a LangChain prompt template based on the specific strategy.
         For RAG strategies, it should incorporate the retrieved_docs.

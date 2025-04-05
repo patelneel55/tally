@@ -5,9 +5,9 @@ Test Runner for PDF Parser Tests
 This script runs all unit tests for the PDF parser implementation.
 """
 
-import unittest
-import sys
 import os
+import sys
+import unittest
 from pathlib import Path
 
 # Add the project root to the Python path
@@ -23,17 +23,17 @@ def run_tests():
     """
     # Create a test suite
     test_suite = unittest.TestSuite()
-    
+
     # Add all tests from TestPDFParser
     test_suite.addTest(unittest.makeSuite(TestPDFParser))
-    
+
     # Run the tests
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(test_suite)
-    
+
     # Return non-zero exit code if tests failed
     return 0 if result.wasSuccessful() else 1
 
 
 if __name__ == "__main__":
-    sys.exit(run_tests()) 
+    sys.exit(run_tests())
