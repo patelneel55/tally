@@ -57,7 +57,7 @@ class ChromaVectorStore(IVectorStore):
                 self._vectorstore = Chroma(
                     collection_name=self.collection_name,
                     embedding_function=embeddings,
-                    persist_directory=self.persist_directory
+                    persist_directory=str(self.persist_directory.resolve()),
                 )
                 logger.info(f"Chroma DB initialized at: {self.persist_directory}")
             except Exception as e:
@@ -98,10 +98,6 @@ class ChromaVectorStore(IVectorStore):
             instance = self.get_vectorstore(embeddings)
             uuids = instance.add_documents(documents)
             logger.info(f"Documents added: {len(uuids)}")
-
-            if self.persist_directory:
-                instance.persist()
-                logger.info(f"Chroma DB persisted at: {self.persist_directory}")
         except Exception as e:
             logger.error(f"Failed to add documents: {str(e)}")
             raise RuntimeError(f"Failed to add documents: {str(e)}") from e
@@ -125,7 +121,7 @@ class ChromaVectorStore(IVectorStore):
         logger.info(f"Creating retriever for Chroma collection '{self.collection_name}' with search_type '{search_type}'...")
         try:
             vs = self.get_vectorstore(embeddings)
-            search_kwargs = search_kwargs or {"k": 4} # Default to retrieve top 4
+            search_kwargs = search_kwargs or {"k": 10} # Default to retrieve top 4
             return vs.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
         except Exception as e:
             raise RuntimeError(f"Failed to create retriever: {str(e)}") from e

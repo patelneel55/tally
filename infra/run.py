@@ -1,3 +1,6 @@
+import pysqlite3
+import sys
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 import asyncio
 import sys
 import logging
@@ -42,7 +45,7 @@ def save_docs(docs, step, ticker, doc_type: FilingType, ext):
 if __name__ == "__main__":
     async def infra_run():
         ticker = "GS"
-        doc_type = FilingType.CURRENT_REPORT
+        doc_type = FilingType.QUARTERLY_REPORT
         logger.info(f"Fetching {ticker} {doc_type.value} filings")
         
         try:
@@ -78,7 +81,7 @@ if __name__ == "__main__":
             print(f"Number of documents: {len(split_docs)}")
 
             retriever = vector_store.as_retriever(embeddings=embedding_model)
-            retrieved_docs = retriever.invoke("What position was John Walter appointed to?")
+            retrieved_docs = retriever.invoke("What is the consolidated cash and cash equivalents for December 2023?")
             save_docs(retrieved_docs, "retrieve", ticker, doc_type, "md")
             return None
         except Exception as e:

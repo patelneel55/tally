@@ -94,7 +94,7 @@ class SECSplitter(ISplitter):
             markdown_lines.insert(1, separator_line)
         return "\n".join(markdown_lines)
 
-    def _flatten_tree(self, node: sp.TreeNode, metadata, path=None, level=0) -> List[Document]:
+    def _flatten_tree(self, node: sp.TreeNode, metadata, path=None, level=1) -> List[Document]:
         is_leaf_node = len(node.children) == 0
         path = path or []
 
@@ -106,8 +106,8 @@ class SECSplitter(ISplitter):
                 doc_metadata.update({ 
                     "type": node.semantic_element.__class__.__name__,
                     "level": level,
-                    "path": path,
-                    "parent": node.parent.semantic_element.text.strip() if node.parent else None,
+                    "path": ' > '.join(path),
+                    "parent": node.parent.semantic_element.text.strip() if node.parent else "",
                 })
                 if isinstance(node.semantic_element, sp.TableElement):
                     content = self._cleanup_table_formatting(node.semantic_element.table_to_markdown())
@@ -121,5 +121,5 @@ class SECSplitter(ISplitter):
 
         for child in node.children:
             # Recursively flatten the child nodes
-            chunks.extend(self._flatten_tree(child, metadata, path=path))
+            chunks.extend(self._flatten_tree(child, metadata, path=path, level=level + 1))
         return chunks

@@ -33,7 +33,6 @@ from datetime import datetime
 from pathlib import Path
 import asyncio
 
-
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ class SECFiling(BaseModel, AcquisitionOutput):
     company_name: str = Field(..., description="Name of the filing company")
     ticker: str = Field(..., description="Stock ticker symbol")
     cik: str = Field(..., description="SEC Central Index Key (CIK)")
-    documentURL: Optional[str] = Field(None, description="URL to the filing document")
+    documentURL: Optional[str] = Field("", description="URL to the filing document")
     textURL: Optional[str] = Field(None, description="URL to the plain text version", alias="linkToTxt")
     pdf_path: Optional[str] = Field(None, description="Local path to cached PDF file")
     html_path: Optional[str] = Field(None, description="Local path to cached HTML file")
@@ -98,9 +97,6 @@ class SECFiling(BaseModel, AcquisitionOutput):
             "ticker": self.ticker,
             "cik": self.cik,
             "documentURL": self.documentURL,
-            "textURL": self.textURL,
-            "pdf_path": self.pdf_path,
-            "html_path": self.html_path
         }
 
 
