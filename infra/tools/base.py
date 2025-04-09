@@ -36,6 +36,15 @@ class BaseTool(ITool):
     def description(self) -> str:
         return self._description
 
+    def model_from_kwargs(self, **kwargs) -> BaseModel:
+        """
+        Convert keyword arguments to a Pydantic model.
+
+        This method is intended to be overridden in subclasses to provide
+        specific argument validation.
+        """
+        return self.args_schema().model_validate(kwargs)
+
 
 class PipelineTool(BaseTool):
     """

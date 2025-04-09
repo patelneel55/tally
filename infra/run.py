@@ -67,25 +67,25 @@ if __name__ == "__main__":
             embeddings = OpenAIEmbeddingProvider()
             vector_store = ChromaVectorStore()
 
-            # # Fetch filings
-            # filings = await fetcher.fetch(
-            #     identifier=ticker,
-            #     filing_type=doc_type,
-            #     data_format=DataFormat.HTML
-            # )
-            # logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
+            # Fetch filings
+            filings = await fetcher.fetch(
+                identifier=ticker,
+                filing_type=doc_type,
+                data_format=DataFormat.HTML
+            )
+            logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
 
-            # docs = await loader.load(filings)
-            # print(f"Number of documents: {len(docs)}")
-            # save_docs(docs, "load", ticker, doc_type, "html")
+            docs = await loader.load(filings)
+            print(f"Number of documents: {len(docs)}")
+            save_docs(docs, "load", ticker, doc_type, "html")
 
-            # documents = parser.parse(docs)
-            # print(f"Number of documents: {len(documents)}")
-            # save_docs(documents, "parse", ticker, doc_type, "md")
+            documents = parser.parse(docs)
+            print(f"Number of documents: {len(documents)}")
+            save_docs(documents, "parse", ticker, doc_type, "md")
 
-            # split_docs = splitter.split_documents(documents)
-            # print(f"Number of documents: {len(split_docs)}")
-            # save_docs(split_docs, "split", ticker, doc_type, "md")
+            split_docs = await splitter.split_documents(documents)
+            print(f"Number of documents: {len(split_docs)}")
+            save_docs(split_docs, "split", ticker, doc_type, "md")
 
             embedding_model = embeddings.get_embedding_model()
             # vector_store.add_documents(split_docs, embedding_model)

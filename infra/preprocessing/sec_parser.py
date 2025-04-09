@@ -1,12 +1,17 @@
+import logging
 import re
 import warnings
 from typing import Any, Dict, List
 
 import sec_parser as sp
 from langchain_core.documents import Document
+from langchain_core.language_models import BaseLanguageModel
 
-from infra.core.interfaces import IParser, ISplitter
+from infra.core.interfaces import ILLMProvider, IParser, ISplitter
 from infra.preprocessing.models import SemanticDocument
+from infra.tools.table_summarizer import TableSummarizerInput, TableSummarizerTool
+
+logger = logging.getLogger(__name__)
 
 
 class SECParser(IParser):
@@ -41,11 +46,12 @@ class SECSplitter(ISplitter):
     Splitter for SEC filings using the sec-parser library.
     """
 
-    def __init__(self):
+    def __init__(self, llm_provider: ILLMProvider = None):
         """Initialize the SEC splitter."""
-        pass
+        self.llm_provider = llm_provider
+        self.table_summarizer = TableSummarizerTool(llm_provider) if llm_provider else None
 
-    def split_documents(self, documents: List[Document]) -> List[Document]:
+    async def split_documents(self, documents: List[Document]) -> List[Document]:
         """
         Splits the documents into sections based on the SemanticTree structure.
         Args:
@@ -58,7 +64,7 @@ class SECSplitter(ISplitter):
         for doc in documents:
             if isinstance(doc, SemanticDocument):
                 # Convert SemanticDocument to Document
-                split_docs = self._convert_tree_to_documents(
+                split_docs = await self._convert_tree_to_documents(
                     doc.as_tree(), doc.metadata
                 )
                 split_documents.extend(split_docs)
@@ -68,7 +74,7 @@ class SECSplitter(ISplitter):
                 )
         return split_documents
 
-    def _convert_tree_to_documents(
+    async def _convert_tree_to_documents(
         self, tree: sp.SemanticTree, metadata: dict
     ) -> List[Document]:
         """
@@ -86,11 +92,11 @@ class SECSplitter(ISplitter):
         documents = []
         for root_node in tree:
             # Process each root node and its children
-            chunks = self._flatten_tree(root_node, metadata)
+            chunks = await self._flatten_tree(root_node, metadata)
             documents.extend(chunks)
         return documents
 
-    def _cleanup_table_formatting(self, markdown_lines: str) -> str:
+    async def _table_formatting(self, markdown_lines: str) -> str:
         """
         Clean up table formatting in the text.
 
@@ -100,15 +106,25 @@ class SECSplitter(ISplitter):
         Returns:
             Cleaned text
         """
-        # Implement the cleanup logic here
+        # Add header separators for tables if doesn't exist
         markdown_lines = markdown_lines.split("\n")
         if len(markdown_lines) > 1 and not re.match(r"^\|[-| ]+\|$", markdown_lines[1]):
             num_cols = markdown_lines[0].count("|") - 1  # exclude outer bars
             separator_line = "|" + "|".join([" --- "] * num_cols) + "|"
             markdown_lines.insert(1, separator_line)
-        return "\n".join(markdown_lines)
+        markdown_table = "\n".join(markdown_lines)
 
-    def _flatten_tree(
+        if self.table_summarizer is None:
+            logger.warning(
+                f"LLM Provider not specified, proceeding without LLM. Using raw table."
+            )
+            return markdown_table
+
+        summarizer_input = TableSummarizerInput(table=markdown_table)
+        table_summary = await self.table_summarizer.run(**summarizer_input.model_dump())
+        return table_summary
+
+    async def _flatten_tree(
         self, node: sp.TreeNode, metadata, path=None, level=1
     ) -> List[Document]:
         is_leaf_node = len(node.children) == 0
@@ -132,7 +148,7 @@ class SECSplitter(ISplitter):
                     }
                 )
                 if isinstance(node.semantic_element, sp.TableElement):
-                    content = self._cleanup_table_formatting(
+                    content = await self._table_formatting(
                         node.semantic_element.table_to_markdown()
                     )
                 else:
@@ -146,6 +162,6 @@ class SECSplitter(ISplitter):
         for child in node.children:
             # Recursively flatten the child nodes
             chunks.extend(
-                self._flatten_tree(child, metadata, path=path, level=level + 1)
+                await self._flatten_tree(child, metadata, path=path, level=level + 1)
             )
         return chunks
