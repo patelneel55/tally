@@ -6,12 +6,12 @@ from langchain_openai import OpenAIEmbeddings
 
 from infra.core.interfaces import IEmbeddingProvider
 from infra.embeddings.models import OpenAIEmbeddingModels
-
+from infra.core.config import settings
 
 class OpenAIEmbeddingProvider(IEmbeddingProvider):
     def __init__(self, model: str = OpenAIEmbeddingModels.SMALL3, api_key: str = None):
         self.model = model
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or settings.OPENAI_API_KEY
         if not self.api_key:
             raise ValueError(
                 "OpenAI API Key not provided or found in environment variables."

@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field, field_validator
 from infra.acquisition.models import AcquisitionOutput
 from infra.core.exceptions import DataFetchError, ValidationError
 from infra.core.interfaces import IDataFetcher
+from infra.core.config import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ class EDGARFetcher(IDataFetcher):
         Args:
             api_key: API key for SEC API access
         """
-        self.api_key = api_key or os.getenv("SEC_API_KEY")
+        self.api_key = api_key or settings.SEC_API_KEY
         if not self.api_key:
             raise ValueError("SEC API key is not set")
 

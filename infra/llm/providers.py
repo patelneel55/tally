@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 
 from infra.core.interfaces import ILLMProvider
 from infra.llm.models import OpenAIModels
+from infra.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class OpenAIProvider(ILLMProvider):
         **kwargs: Any,
     ):
         self.model = model
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or settings.OPENAI_API_KEY
         if not self.api_key:
             raise ValueError(
                 "OpenAI API Key not provided or found in environment variables."
