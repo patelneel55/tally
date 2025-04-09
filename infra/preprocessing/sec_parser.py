@@ -120,6 +120,8 @@ class SECSplitter(ISplitter):
             )
             return markdown_table
 
+        # TODO(neelp): Append table metadata which will be responsible for retrieving the actual table
+        # content from the document
         summarizer_input = TableSummarizerInput(table=markdown_table)
         table_summary = await self.table_summarizer.run(**summarizer_input.model_dump())
         return table_summary

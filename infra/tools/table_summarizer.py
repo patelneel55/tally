@@ -1,5 +1,5 @@
 import logging
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Type
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
@@ -32,39 +32,38 @@ class TableSummarizerTool(BaseTool):
     )
 
     _TABLE_SUMMARIZER_PROMPT = """
-You are an expert data analyst. Your task is to summarize the provided Markdown table for semantic search purposes. Analyze its structure (headers, rows). Generate a descriptive paragraph that includes:
-1. The main subject or topic of the table.
-2. The key types of data represented in the columns (e.g., identify categories from headers like 'Product Name', metrics from headers like 'Revenue', time periods from headers like 'Month').
-3. The general nature of the items listed in the rows.
-4. If apparent from the data and structure, mention the overall purpose or a key insight/trend.
+Summarize the content of the provided table in one to two concise sentences.
+First, describe what the table shows by identifying its subject, key columns, and general row categories,
+and include any available timeframes (e.g., Q3 2024, year-end 2023) or company names.
+If the table contains financial data, emphasize relevant metrics such as total assets, total liabilities, cash and cash equivalents,
+and additional paid-in capital, and note if the table is consolidated, unaudited, or segment-specific.
+For non-financial tables, provide a clear description of the categories and data without overloading the summary with excessive details.
+Ensure the summary remains succinct, using key financial and general terminology that supports semantic retrieval without exceeding token limits.
+The summary should be robust enough that if a query were to try and retrieve any specific line item of the table,
+the summary will contain the necessary references to identify the table as the data source.
 
-Focus on the essence of the data, not on listing individual values or rows verbatim.
-
-Markdown Table:
-```markdown
+```
 {table}
 ```
-
-Concise Summary:
-        """
+"""
 
     def __init__(self, llm_provider: ILLMProvider):
         """
         Initialize the TableSummarizer with the table name.
 
         Args:
-            table: The name of the table to summarize.
+            llm_provider: The LLM provider to use for summarization.
         """
         super().__init__(
-            name=self.TOOL_NAME,
-            description=self.TOOL_DESCRIPTION,
+            name=self._TOOL_NAME,
+            description=self._TOOL_DESCRIPTION,
         )
-        self.llm_provider = llm_provider
+        self._llm_provider = llm_provider
         self._llm_instance: Optional[BaseLanguageModel] = None  # Lazy load the model
 
-        self.prompt_template = ChatPromptTemplate.from_messages(
+        self._prompt_template = ChatPromptTemplate.from_messages([
             HumanMessagePromptTemplate.from_template(self._TABLE_SUMMARIZER_PROMPT),
-        )
+        ])
 
     def args_schema(self) -> BaseModel:
         """
@@ -81,7 +80,7 @@ Concise Summary:
         This method ensures that the language model is only loaded when needed.
         """
         if self._llm_instance is None:
-            self._llm_instance = self.llm_provider.get_model()
+            self._llm_instance = self._llm_provider.get_model()
         return self._llm_instance
 
     async def run(self, **kwargs) -> str:
@@ -94,12 +93,13 @@ Concise Summary:
         Returns:
             str: The summarized text of the table.
         """
-        logger.info(f"📌 TOOL EXECUTION: {self.name()} with args: {kwargs}")
+        logger.info(f"📌 TOOL EXECUTION: {self.name()}")
         try:
             llm = self._llm()
 
-            summarizer_model: TableSummarizerInput = super().model_from_kwargs(**kwargs)
-            prompt = self.prompt_template.format_prompt(table=summarizer_model.table)
+            # Create a new instance of TableSummarizerInput and validate the kwargs
+            summarizer_model = TableSummarizerInput(**kwargs)
+            prompt = self._prompt_template.format_prompt(table=summarizer_model.table)
             response = await llm.ainvoke(prompt)
 
             # Chat models (like ChatOpenAI) return a message object (e.g., AIMessage)
@@ -117,7 +117,7 @@ Concise Summary:
             if not isinstance(summary, str):  # Final check
                 summary = ""
 
-            logger.info(f"✅ TOOL COMPLETED: {self.name()} successfully")
+            logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
             return summary.strip()
 
         except Exception as e:

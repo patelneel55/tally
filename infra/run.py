@@ -23,6 +23,7 @@ from infra.parsers.pdf_parser import PDFParser
 from infra.preprocessing.markdown_splitter import MarkdownSplitter
 from infra.preprocessing.sec_parser import SECParser, SECSplitter
 from infra.vector_stores.chromadb import ChromaVectorStore
+from infra.llm.providers import OpenAIProvider
 
 # Set up logging
 logging.basicConfig(
@@ -63,7 +64,8 @@ if __name__ == "__main__":
             fetcher = EDGARFetcher()
             loader = WebLoader(crawl_strategy="all", max_crawl_depth=0)
             parser = SECParser()
-            splitter = SECSplitter()
+            llm_provider = OpenAIProvider()
+            splitter = SECSplitter(llm_provider=llm_provider)
             embeddings = OpenAIEmbeddingProvider()
             vector_store = ChromaVectorStore()
 

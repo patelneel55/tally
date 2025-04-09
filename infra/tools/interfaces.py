@@ -55,9 +55,8 @@ class ITool(BaseTool, ABC):
         """
         pass
 
-    @property
     @abstractmethod
-    def args_schema(self) -> Type[BaseModel]:
+    def args_schema(self) -> BaseModel:
         """
         Return the schema for the tool's arguments.
 
@@ -68,7 +67,6 @@ class ITool(BaseTool, ABC):
         """
         pass
 
-    @property
     @abstractmethod
     async def run(self, **kwargs) -> Any:
         """
