@@ -11,12 +11,17 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
 from infra.agents.base import IAgent
-from infra.core.interfaces import IEmbeddingProvider, ILLMProvider, IVectorStore
+from infra.core.interfaces import IEmbeddingProvider, ILLMProvider, IOutputFormatter, IVectorStore
 from infra.pipelines.indexing_pipeline import IndexingPipeline
+from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
+# from infra.tools.debug_tools import EchoTool
+from infra.tools.pipelines import IndexingPipelineTool, RAGQueryTool
+from infra.output.simple import SimpleTextOutputFormatter
+from infra.agents.base import LangChainAgent
 
 # from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
 # from infra.tools.debug_tools import EchoTool
-from infra.tools.pipelines import IndexingPipelineTool
+# from infra.tools.pipelines import IndexingPipelineTool
 
 # Set up logging
 logging.basicConfig(
@@ -128,18 +133,18 @@ class HybridController:
             should_save_intermediates=self.debug,
         )
 
-        # # Create the RAG pipeline
-        # rag_pipeline = RAGFinancialAnalysisPipeline(
-        #     prompt_strategy=None,  # Will be set based on task
-        #     llm_provider=self.llm_provider,
-        #     output_formatter=None,  # Will be set based on task
-        #     vector_store=self.vector_store,
-        #     embedding_provider=self.embedding_provider
-        # )
+        # Create the RAG pipeline with a role-based prompting strategy
+        # For now, we'll use a simple text output approach
+        rag_pipeline = RAGFinancialAnalysisPipeline(
+            llm_provider=self.llm_provider,
+            output_formatter=SimpleTextOutputFormatter(),
+            vector_store=self.vector_store,
+            embedding_provider=self.embedding_provider
+        )
 
         return {
             "indexing_pipeline": indexing_pipeline,
-            # "rag_pipeline": rag_pipeline
+            "rag_pipeline": rag_pipeline
         }
 
     def _initialize_pipeline_patterns(self) -> List[PipelinePattern]:
@@ -157,13 +162,13 @@ class HybridController:
         )
 
         # Pattern for querying financial data
-        # rag_pattern = PipelinePattern(
-        #     pattern=r"(?i)(?:query|ask|analyze|search)(?:\s+about)?\s+(.+?)(?:\s+for\s+([A-Z]+))?(?:\.|$)",
-        #     pipeline_name="rag_pipeline",
-        #     param_extractor=self._extract_rag_params
-        # )
+        rag_pattern = PipelinePattern(
+            pattern=r"(?i)(?:query|ask|analyze|search)(?:\s+about)?\s+(.+?)(?:\s+for\s+([A-Z]+))?(?:\.|$)",
+            pipeline_name="rag_pipeline",
+            param_extractor=self._extract_rag_params
+        )
 
-        return [indexing_pattern]  # , rag_pattern]
+        return [indexing_pattern, rag_pattern]
 
     def _extract_indexing_params(self, task: str) -> Dict[str, Any]:
         """
@@ -324,17 +329,15 @@ class HybridController:
         self, verbose: bool = True, debug: bool = False
     ) -> IAgent:
         """
-        Create a general-purpose agent with tools for all pipelines.
+        Create an agent with the available tools.
 
         Args:
             verbose: Whether to enable verbose output
             debug: Whether to enable debug logging
 
         Returns:
-            An agent with tools for all pipelines
+            An instance of IAgent with tools
         """
-        from infra.agents.base import LangChainAgent
-
         # Use provided values or fall back to controller settings
         verbose = verbose if verbose is not None else self.verbose
         debug = debug if debug is not None else self.debug
@@ -349,11 +352,11 @@ class HybridController:
 
         # Create tools for pipelines
         indexing_tool = IndexingPipelineTool(self.pipelines["indexing_pipeline"])
-        # rag_tool = RAGQueryTool(self.pipelines["rag_pipeline"])
+        rag_tool = RAGQueryTool(self.pipelines["rag_pipeline"])
 
         # Add regular tools to agent
         agent.add_tool(indexing_tool)
-        # agent.add_tool(rag_tool)
+        agent.add_tool(rag_tool)
 
         # Add debug tools if debug mode is enabled
         # if debug:

@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from core.interfaces import (
+from infra.core.interfaces import (
     IEmbeddingProvider,
     ILLMProvider,
     IOutputFormatter,
@@ -8,50 +8,102 @@ from core.interfaces import (
     IVectorStore,
 )
 from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain_core.language_models import BaseLanguageModel
+
 
 
 class RAGFinancialAnalysisPipeline:
     def __init__(
         self,
-        prompt_strategy: IPromptStrategy,  # Assumes a RAG-compatible strategy
         llm_provider: ILLMProvider,
         output_formatter: IOutputFormatter,
         vector_store: IVectorStore,
         embedding_provider: IEmbeddingProvider,
-        retriever_search_type: str = "similarity",
-        retriever_search_kwargs: Dict[str, Any] = None,
+        prompt_strategy: IPromptStrategy = None,  # Optional now since we'll create prompt directly
     ):
 
         self.prompt_strategy = prompt_strategy
-        self.llm = llm_provider.get_model()
+        self.llm_provider = llm_provider
+        self._llm_instance = None  # Lazy initialization
         self.output_parser = output_formatter.get_parser()
         self.formatter = output_formatter
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
-        self.retriever_search_type = retriever_search_type
-        self.retriever_search_kwargs = retriever_search_kwargs or {"k": 4}  # Default k
 
-    def run(self, task_description: str, prompt_context: Dict[str, Any] = None) -> str:
+    def _llm(self) -> BaseLanguageModel:
+        """
+        Lazy initialization of the LLM instance.
+        """
+        if self._llm_instance is None:
+            self._llm_instance = self.llm_provider.get_model()
+        return self._llm_instance
+
+    async def run(self, task_description: str, prompt_context: Dict[str, Any] = None, filters: Dict[str, Any] = None, retriever_search_type: str = "similarity", retriever_search_kwargs: Dict[str, Any] = None) -> str:
         print(f"Starting RAG pipeline for task: {task_description}")
         prompt_context = prompt_context or {}
 
-        # 1. Get Retriever
+        # 1. Get Retriever with filters if provided
         embeddings = self.embedding_provider.get_embedding_model()
+
+        # Deep copy the default search kwargs so we don't modify the instance variable
+        search_kwargs = dict(retriever_search_kwargs or {"k": 4})
+
+        # Add filters to search_kwargs if provided via the filters parameter
+        if filters:
+            print(f"Applying filters to retrieval: {filters}")
+            search_kwargs["filter"] = filters
+
+        print(f"Using search type: {retriever_search_type}, search parameters: {search_kwargs}")
+
         retriever = self.vector_store.as_retriever(
             embeddings=embeddings,
-            search_type=self.retriever_search_type,
-            search_kwargs=self.retriever_search_kwargs,
+            search_type=retriever_search_type,
+            search_kwargs=search_kwargs,
         )
 
-        # 2. Create Prompt Template (expects 'retrieved_context' and 'question')
-        # The prompt strategy needs to be aware it's for RAG
-        # We pass None for retrieved_docs here because the RAG chain will fetch them
-        prompt_template = self.prompt_strategy.create_prompt(
-            context=prompt_context,
-            task_description=task_description,  # Used by strategy if needed
-            retrieved_docs=None,  # RAG chain handles retrieval
+        # 2. Create Prompt Template directly
+        # Create a system and human message template
+        system_template = (
+            """
+You are a financial analysis assistant tasked with answering user questions using only the context provided below.
+This context has been retrieved from official SEC filings (10-K, 10-Q, or 8-K) for the specified company.
+
+Your job is to:
+
+1. Read and understand the user's question.
+2. Review the full set of retrieved filing excerpts provided in the context section.
+3. Generate a clear, detailed, and accurate answer based only on that context.
+4. Avoid making up information or inferring anything that is not directly supported by the context.
+5. If applicable, cite the most relevant source chunk(s) to support your answer using a format like: [source #1], [source #2].
+
+Important Guidelines:
+- Do NOT hallucinate or fabricate financial information.
+- If the context does not contain a direct answer, clearly say so and do not speculate.
+- Assume the user may be using this output to make financial decisions — your answer must be reliable and grounded in the source material.
+
+Answer as a professional equity research analyst would: clear, precise, and factually grounded.
+        """
         )
+
+        human_template = """Context information is below.
+---------------------
+{retrieved_context}
+---------------------
+
+Given the context information and no prior knowledge, answer the following question:
+{question}
+"""
+
+        # Create prompt template from messages
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", system_template),
+            ("human", human_template),
+        ])
+
+        # Retrieve LLM
+        llm = self._llm()
 
         # 3. Define RAG Chain using LCEL
         #    Inputs: 'question' (which is our task_description)
@@ -65,13 +117,10 @@ class RAGFinancialAnalysisPipeline:
                 }
             )
             | prompt_template  # Fills template with context and question
-            | self.llm  # Sends filled prompt to LLM
+            | llm  # Sends filled prompt to LLM
             | self.output_parser  # Parses LLM response
             | self.formatter.format  # Formats the parsed data (custom method) - needs slight adjustment if parser returns non-dict
         )
-
-        # If formatter.format expects the direct parsed output:
-        # rag_chain_final = rag_chain | self.formatter.format
 
         print("Invoking RAG chain...")
         # 4. Invoke Chain

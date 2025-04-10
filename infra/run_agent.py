@@ -16,7 +16,7 @@ import argparse
 import asyncio
 import logging
 import sys
-
+import os
 from infra.acquisition.sec_fetcher import DataFormat, FilingType
 
 # from infra.agents.base import LangChainAgent
@@ -35,6 +35,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def write_to_file(result: str):
+    """
+    Save the documents to a specified location.
+    """
+    url_hash = hash(result.get("output"))
+    output_path = f"cache/analysis_output/{url_hash}.md"
+    # Create directory if it doesn't exist
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    # Write all documents to the file
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("# INPUT\n")
+        f.write(f"{result.get('input')}\n\n")
+        f.write("# OUTPUT\n")
+        f.write(f"{result.get('output')}\n\n")
+
+    logger.info(
+        f"Analysis to {output_path}"
+    )
+
 async def run_examples(controller, general_agent, args):
     """Run example tasks using the hybrid controller and agent."""
 
@@ -42,7 +64,7 @@ async def run_examples(controller, general_agent, args):
     if args.example == "all" or args.example == "1":
         logger.info("\n\n===== EXAMPLE 1: DIRECT PIPELINE EXECUTION =====")
         indexing_task = (
-            "Index the quarterly SEC filings for GS from Jan 2024 to Jan 2025"
+            "Index the annual SEC filings for GS from Jan 2024 to Jan 2025"
         )
         try:
             logger.info(f"Running task: {indexing_task}")
@@ -54,13 +76,21 @@ async def run_examples(controller, general_agent, args):
     # Example 2: RAG query via pattern matching
     if args.example == "all" or args.example == "2":
         logger.info("\n\n===== EXAMPLE 2: RAG QUERY VIA PATTERN MATCHING =====")
-        rag_task = "Analyze the profitability trends for GS over the last quarter"
-        try:
-            logger.info(f"Running task: {rag_task}")
-            result = await controller.process(rag_task)
-            logger.info(f"Analysis result: {result}")
-        except Exception as e:
-            logger.error(f"Error: {e}")
+        questions = [
+            "How does Goldman Sachs' performance in Investment Banking compare to Asset Management?",
+            "Summarize how Goldman Sachs' capital allocation strategy has evolved recently.",
+            "How does Goldman Sachs describe the impact of interest rate changes on its business?",
+            "How does GS explain its employee compensation philosophy and how it ties to performance?",
+            "What are the main drivers of Goldman Sachs' revenue growth as discussed in their filings?",
+        ]
+        for question in questions:
+            try:
+                logger.info(f"Running task: {question}")
+                result = await controller.process(question)
+                write_to_file(result)
+                logger.info(f"Analysis result: {result}")
+            except Exception as e:
+                logger.error(f"Error: {e}")
 
     # Example 3: Complex task requiring agent
     if args.example == "all" or args.example == "3":
