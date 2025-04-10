@@ -3,17 +3,8 @@ Handles loading and validation of application configuration from various sources
 like environment variables, .env files, and YAML configuration files.
 """
 
-import logging
-import os
-from typing import Any, Dict, Optional, Union
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-import yaml
-from dotenv import load_dotenv
-
-from .exceptions import ConfigurationError
-
-logger = logging.getLogger(__name__)
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -26,6 +17,7 @@ class Settings(BaseSettings):
     - Validate values when the application starts
     - Load values from environment variables
     """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -42,5 +34,6 @@ class Settings(BaseSettings):
     POLYGON_API_KEY: str = Field(..., alias="POLYGON_API_KEY")
 
     CACHE: str = Field("cache", alias="CACHE_DIR")
+
 
 settings = Settings()

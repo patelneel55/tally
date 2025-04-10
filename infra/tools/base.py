@@ -26,16 +26,12 @@ class BaseTool(ITool):
     This provides a common foundation for implementing tools.
     """
 
-    def __init__(self, name: str, description: str):
-        super().__init__()
-        self._name = name
-        self._description = description
+    def __init__(self, name: str, description: str, args_schema: Type[BaseModel]):
+        super().__init__(name=name, description=description)
+        self.name = name
+        self.description = description
+        self.args_schema: Type[BaseModel] = args_schema
 
-    def name(self) -> str:
-        return self._name
-
-    def description(self) -> str:
-        return self._description
 
 class PipelineTool(BaseTool):
     """
@@ -45,7 +41,12 @@ class PipelineTool(BaseTool):
     """
 
     def __init__(
-        self, name: str, description: str, pipeline, arg_mapping: Dict[str, str] = None
+        self,
+        name: str,
+        description: str,
+        args_schema: Type[BaseModel],
+        pipeline,
+        arg_mapping: Dict[str, str] = None,
     ):
         """
         Initialize the pipeline tool.
@@ -56,15 +57,10 @@ class PipelineTool(BaseTool):
             pipeline: The pipeline instance to wrap
             arg_mapping: Optional mapping from tool args to pipeline args
         """
-        super().__init__(name, description)
-        self.pipeline = pipeline
-        self.arg_mapping = arg_mapping or {}
+        super().__init__(name, description, args_schema)
 
-    def args_schema(self) -> Type[BaseModel]:
-        """
-        Implement in subclasses to define the specific arguments for the pipeline.
-        """
-        raise NotImplementedError("Subclasses must implement args_schema")
+        self._pipeline = pipeline
+        self._arg_mapping = arg_mapping or {}
 
     async def run(self, **kwargs) -> Any:
         """
@@ -76,21 +72,21 @@ class PipelineTool(BaseTool):
         Returns:
             The result of the pipeline execution
         """
-        logger.info(f"📌 TOOL EXECUTION: {self.name()} with args: {kwargs}")
+        logger.info(f"📌 TOOL EXECUTION: {self.name}")
 
         # Map tool arguments to pipeline arguments if needed
-        if self.arg_mapping:
+        if self._arg_mapping:
             pipeline_kwargs = {}
-            for tool_arg, pipeline_arg in self.arg_mapping.items():
+            for tool_arg, pipeline_arg in self._arg_mapping.items():
                 if tool_arg in kwargs:
                     pipeline_kwargs[pipeline_arg] = kwargs[tool_arg]
             kwargs = pipeline_kwargs
 
         # Run the pipeline
         try:
-            result = await self.pipeline.run(**kwargs)
-            logger.info(f"✅ TOOL COMPLETED: {self.name()} successfully")
+            result = await self._pipeline.run(**kwargs)
+            logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
             return result
         except Exception as e:
-            logger.error(f"❌ TOOL ERROR: {self.name()} failed with error: {str(e)}")
+            logger.error(f"❌ TOOL ERROR: {self.name} failed with error: {str(e)}")
             raise

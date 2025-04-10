@@ -7,7 +7,7 @@ These tools allow agents to use pipelines as building blocks for complex workflo
 """
 
 import datetime
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Type
 
 from pydantic import BaseModel, Field
 
@@ -42,8 +42,8 @@ class IndexingPipelineTool(PipelineTool):
     This tool allows agents to fetch, process, and index SEC filings.
     """
 
-    TOOL_NAME: ClassVar[str] = "index_sec_filings"
-    TOOL_DESCRIPTION: ClassVar[str] = (
+    _TOOL_NAME: ClassVar[str] = "index_sec_filings"
+    _TOOL_DESCRIPTION: ClassVar[str] = (
         """
         Downloads and indexes SEC filings (10-K, 10-Q, or 8-K) for a specified public company within a given date range. This tool retrieves the filings from the SEC EDGAR database, chunks the text into semantically meaningful segments, embeds them using a language model, and stores the resulting vectors in a Weaviate vector store for future semantic search and retrieval.
         Use this tool when:
@@ -70,17 +70,17 @@ class IndexingPipelineTool(PipelineTool):
             pipeline: An instance of IndexingPipeline
         """
         super().__init__(
-            name=self.TOOL_NAME, description=self.TOOL_DESCRIPTION, pipeline=pipeline
+            name=self._TOOL_NAME,
+            description=self._TOOL_DESCRIPTION,
+            args_schema=IndexingToolInput,
+            pipeline=pipeline,
+            arg_mapping={
+                "ticker": "identifier",
+                "filing_type": "filing_type",
+                "start_date": "start_date",
+                "end_date": "end_date",
+            },
         )
-
-    def args_schema(self) -> BaseModel:
-        """
-        Define the schema for the tool's arguments.
-
-        Returns:
-            A dictionary mapping argument names to their parameter definitions
-        """
-        return IndexingToolInput()
 
 
 # class RAGQueryTool(PipelineTool):

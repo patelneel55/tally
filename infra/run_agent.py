@@ -41,7 +41,9 @@ async def run_examples(controller, general_agent, args):
     # Example 1: Direct pipeline execution via pattern matching
     if args.example == "all" or args.example == "1":
         logger.info("\n\n===== EXAMPLE 1: DIRECT PIPELINE EXECUTION =====")
-        indexing_task = "Index the quarterly SEC filings for GS"
+        indexing_task = (
+            "Index the quarterly SEC filings for GS from Jan 2024 to Jan 2025"
+        )
         try:
             logger.info(f"Running task: {indexing_task}")
             result = await controller.process(indexing_task)
@@ -142,7 +144,7 @@ async def main():
         # Initialize basic components
         llm_provider = OpenAIProvider()
         embedding_provider = OpenAIEmbeddingProvider()
-        vector_store = ChromaVectorStore(persist_directory="./financial_db")
+        vector_store = ChromaVectorStore()
 
         # Create the hybrid controller with verbosity settings
         controller = HybridController(

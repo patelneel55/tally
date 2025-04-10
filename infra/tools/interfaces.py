@@ -27,45 +27,24 @@ class ITool(BaseTool, ABC):
     and a run method that performs the actual work.
     """
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """
-        Return the name of the tool.
+    # def __init__(self, name: str, description: str):
+    #     """
+    #     Initialize the tool.
+    #     """
+    #     # Initialize the parent class without validation
+    #     super().__init__()
 
-        The name should be unique and descriptive of the tool's function.
-        It will be used by agents to identify and invoke the tool.
+    # @abstractmethod
+    # def args_schema(self) -> BaseModel:
+    #     """
+    #     Return the schema for the tool's arguments.
 
-        Returns:
-            A string containing the tool's name
-        """
-        pass
+    #     This defines what arguments the tool accepts and their types.
 
-    @property
-    @abstractmethod
-    def description(self) -> str:
-        """
-        Return a description of what the tool does.
-
-        This description will be used by agents to understand the tool's
-        purpose and decide when to use it.
-
-        Returns:
-            A string describing the tool's functionality
-        """
-        pass
-
-    @abstractmethod
-    def args_schema(self) -> BaseModel:
-        """
-        Return the schema for the tool's arguments.
-
-        This defines what arguments the tool accepts and their types.
-
-        Returns:
-            A dictionary mapping their parameter definitions
-        """
-        pass
+    #     Returns:
+    #         A dictionary mapping their parameter definitions
+    #     """
+    #     pass
 
     @abstractmethod
     async def run(self, **kwargs) -> Any:
@@ -86,12 +65,20 @@ class ITool(BaseTool, ABC):
         """
         pass
 
-    async def _arun(self, **kwargs) -> Any:
-        # Optional: unify LangChain's interface with your own
-        return await self.run(**kwargs)
-
     def _run(self, **kwargs) -> Any:
-        # LangChain requires this; optionally wrap sync call
+        """
+        Run the tool synchronously.
+
+        This is required by LangChain's BaseTool, but we'll just call the async version.
+        """
         import asyncio
 
         return asyncio.run(self.run(**kwargs))
+
+    async def _arun(self, **kwargs) -> Any:
+        """
+        Run the tool asynchronously.
+
+        This is the preferred method for running the tool.
+        """
+        return await self.run(**kwargs)

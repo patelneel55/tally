@@ -33,9 +33,9 @@ import aiohttp
 from pydantic import BaseModel, Field, field_validator
 
 from infra.acquisition.models import AcquisitionOutput
+from infra.core.config import settings
 from infra.core.exceptions import DataFetchError, ValidationError
 from infra.core.interfaces import IDataFetcher
-from infra.core.config import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)

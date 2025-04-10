@@ -57,21 +57,16 @@ the summary will contain the necessary references to identify the table as the d
         super().__init__(
             name=self._TOOL_NAME,
             description=self._TOOL_DESCRIPTION,
+            args_schema=TableSummarizerInput,
         )
         self._llm_provider = llm_provider
         self._llm_instance: Optional[BaseLanguageModel] = None  # Lazy load the model
 
-        self._prompt_template = ChatPromptTemplate.from_messages([
-            HumanMessagePromptTemplate.from_template(self._TABLE_SUMMARIZER_PROMPT),
-        ])
-
-    def args_schema(self) -> BaseModel:
-        """
-        Return the schema for the tool's arguments.
-
-        This defines what arguments the tool accepts and their types.
-        """
-        return TableSummarizerInput()
+        self._prompt_template = ChatPromptTemplate.from_messages(
+            [
+                HumanMessagePromptTemplate.from_template(self._TABLE_SUMMARIZER_PROMPT),
+            ]
+        )
 
     def _llm(self) -> BaseLanguageModel:
         """

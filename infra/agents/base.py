@@ -124,28 +124,9 @@ class LangChainAgent(BaseAgent):
         # Create callback manager if we have callbacks
         callback_manager = CallbackManager(callbacks) if callbacks else None
 
-        # Define wrapper functions outside the loop to avoid lambda issues
-        # def create_sync_wrapper(tool: ITool):
-        #     async def _run(**args):
-        #         return await tool.run(**args)
-        #     return _run
-
-        # Convert our tools to LangChain tools
-        # langchain_tools = []
-        # logger.info("🔧 Initializing tools for LangChain agent")
-        # for tool in self.tools:
-        #     logger.info(f"🔧 Tool: {tool.name()} - {tool.name()}")
-        #     # Create a LangChain tool that wraps our tool
-        #     tool_runner = create_sync_wrapper(tool)
-
-        #     langchain_tool = LangChainBaseTool(
-        #         name=tool.name(),
-        #         description=tool.description(),
-        #         func=tool_runner,
-        #         coroutine=tool_runner,
-        #         args_schema=tool.args_schema(),
-        #     )
-        #     langchain_tools.append(langchain_tool)
+        tool_names = [tool.name for tool in self.tools]
+        logger.info(f"🧰 Agent equipped with tools: {', '.join(tool_names)}")
+        logger.info(f"🤖 Starting agent execution for task: {task}")
 
         # Initialize the LangChain agent
         llm = self.llm_provider.get_model()
@@ -159,11 +140,6 @@ class LangChainAgent(BaseAgent):
         }
         agent_type = agent_type_map.get(self.agent_type, AgentType.OPENAI_FUNCTIONS)
 
-        # Log available tools
-        tool_names = [tool.name() for tool in self.tools]
-        logger.info(f"🧰 Agent equipped with tools: {', '.join(tool_names)}")
-        logger.info(f"🤖 Starting agent execution for task: {task}")
-
         # Initialize the agent with callbacks
         agent = initialize_agent(
             tools=self.tools,
@@ -175,7 +151,7 @@ class LangChainAgent(BaseAgent):
 
         # Run the agent
         try:
-            result = await agent.arun(task)
+            result = await agent.ainvoke(task)
             logger.info(f"✅ Agent completed task successfully")
             return result
         except Exception as e:

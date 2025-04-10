@@ -4,9 +4,10 @@ from langchain_community.embeddings import HuggingFaceEmbeddings  # Example
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 
+from infra.core.config import settings
 from infra.core.interfaces import IEmbeddingProvider
 from infra.embeddings.models import OpenAIEmbeddingModels
-from infra.core.config import settings
+
 
 class OpenAIEmbeddingProvider(IEmbeddingProvider):
     def __init__(self, model: str = OpenAIEmbeddingModels.SMALL3, api_key: str = None):

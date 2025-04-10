@@ -6,9 +6,9 @@ import openai
 from langchain_core.language_models import BaseLanguageModel
 from langchain_openai import ChatOpenAI
 
+from infra.core.config import settings
 from infra.core.interfaces import ILLMProvider
 from infra.llm.models import OpenAIModels
-from infra.core.config import settings
 
 logger = logging.getLogger(__name__)
 

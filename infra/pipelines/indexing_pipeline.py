@@ -118,9 +118,12 @@ class IndexingPipeline:
 
     async def run(
         self,
+        *,
         identifier: str,
         filing_type: Union[FilingType, str],
         data_format: DataFormat = DataFormat.HTML,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
         force_reindex: bool = False,
     ):
         """
@@ -165,7 +168,7 @@ class IndexingPipeline:
                 )
 
             # Step 4: Split documents
-            split_docs = self.splitter.split_documents(parsed_docs)
+            split_docs = await self.splitter.split_documents(parsed_docs)
             logger.info(f"Split into {len(split_docs)} chunks")
             if self.should_save_intermediates:
                 self.save_docs(split_docs, "split", identifier, filing_type.value, "md")

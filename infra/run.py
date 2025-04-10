@@ -18,12 +18,12 @@ from infra.acquisition.sec_fetcher import (
 )
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.ingestion.web_loader import WebLoader
+from infra.llm.providers import OpenAIProvider
 from infra.parsers.html_parser import HTMLParser
 from infra.parsers.pdf_parser import PDFParser
 from infra.preprocessing.markdown_splitter import MarkdownSplitter
 from infra.preprocessing.sec_parser import SECParser, SECSplitter
 from infra.vector_stores.chromadb import ChromaVectorStore
-from infra.llm.providers import OpenAIProvider
 
 # Set up logging
 logging.basicConfig(
@@ -71,9 +71,7 @@ if __name__ == "__main__":
 
             # Fetch filings
             filings = await fetcher.fetch(
-                identifier=ticker,
-                filing_type=doc_type,
-                data_format=DataFormat.HTML
+                identifier=ticker, filing_type=doc_type, data_format=DataFormat.HTML
             )
             logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
 

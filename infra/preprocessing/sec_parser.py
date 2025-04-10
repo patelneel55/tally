@@ -49,7 +49,9 @@ class SECSplitter(ISplitter):
     def __init__(self, llm_provider: ILLMProvider = None):
         """Initialize the SEC splitter."""
         self.llm_provider = llm_provider
-        self.table_summarizer = TableSummarizerTool(llm_provider) if llm_provider else None
+        self.table_summarizer = (
+            TableSummarizerTool(llm_provider) if llm_provider else None
+        )
 
     async def split_documents(self, documents: List[Document]) -> List[Document]:
         """
