@@ -19,96 +19,23 @@ Financial importance:
 - Preserving document structure helps AI understand context and relationships
 """
 
-import asyncio
 import json
 import logging
-import os
 from datetime import date as Date
-from datetime import datetime
-from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 from pydantic import BaseModel, Field, field_validator
 
-from infra.acquisition.models import AcquisitionOutput
+import infra.acquisition.models as models
+from infra.acquisition.models import DataFormat, FilingType, SECFiling
 from infra.core.config import settings
 from infra.core.exceptions import DataFetchError, ValidationError
 from infra.core.interfaces import IDataFetcher
 
 # Set up logging
 logger = logging.getLogger(__name__)
-
-
-class FilingType(str, Enum):
-    """SEC filing types enumeration."""
-
-    ANNUAL_REPORT = "10-K"
-    QUARTERLY_REPORT = "10-Q"
-    CURRENT_REPORT = "8-K"
-    PROXY_STATEMENT = "DEF 14A"
-    REGISTRATION_STATEMENT = "S-1"
-
-
-class DataFormat(str, Enum):
-    """Data format options for SEC filings."""
-
-    HTML = "html"
-    PDF = "pdf"
-
-
-class SECFiling(BaseModel, AcquisitionOutput):
-    """
-    Represents an SEC filing document with associated metadata.
-
-    This model is used to structure the data returned from the SEC API
-    and provide a consistent interface for working with filing documents.
-    """
-
-    accessionNo: str = Field(..., description="SEC filing accession number")
-    formType: str = Field(..., description="Type of SEC filing (e.g. 10-K, 10-Q)")
-    filing_date: datetime = Field(
-        ..., description="Date the filing was submitted", alias="filedAt"
-    )
-    company_name: str = Field(..., description="Name of the filing company")
-    ticker: str = Field(..., description="Stock ticker symbol")
-    cik: str = Field(..., description="SEC Central Index Key (CIK)")
-    documentURL: Optional[str] = Field("", description="URL to the filing document")
-    textURL: Optional[str] = Field(
-        None, description="URL to the plain text version", alias="linkToTxt"
-    )
-    pdf_path: Optional[str] = Field(None, description="Local path to cached PDF file")
-    html_path: Optional[str] = Field(None, description="Local path to cached HTML file")
-
-    class Config:
-        populate_by_name = True
-
-    @field_validator("filing_date", mode="before")
-    def parse_datetime(cls, value):
-        """Convert ISO format string to datetime object."""
-        if isinstance(value, str):
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return value
-
-    def get_uris(self) -> List[str]:
-        """Return a list of URIs for the filing."""
-        uris = []
-        if self.documentURL:
-            uris.append(self.documentURL)
-        return uris
-
-    def get_metadata(self) -> Dict[str, Any]:
-        """Return metadata for the filing."""
-        return {
-            "accessionNo": self.accessionNo,
-            "formType": self.formType,
-            "filing_date": self.filing_date.isoformat(),
-            "company_name": self.company_name,
-            "ticker": self.ticker,
-            "cik": self.cik,
-            "documentURL": self.documentURL,
-        }
 
 
 class FilingRequest(BaseModel):
@@ -120,11 +47,17 @@ class FilingRequest(BaseModel):
     in the correct format.
     """
 
-    identifier: str = Field(..., description="CIK number or stock ticker")
+    identifier: List[str] = Field(
+        ..., description="List of CIK numbers or stock tickers"
+    )
     filing_type: Optional[FilingType] = Field(None, description="Type of SEC filing")
-    date: Optional[Date] = Field(None, description="Filing date")
+    start_date: Optional[Date] = Field(None, description="Start date for filing search")
+    end_date: Optional[Date] = Field(None, description="End date for filing search")
+    max_size: Optional[int] = Field(
+        default=1, description="Maximum number of filings to fetch"
+    )
     data_format: DataFormat = Field(
-        default=DataFormat.PDF, description="Output data format"
+        default=DataFormat.HTML, description="Output data format"
     )
 
     @field_validator("identifier")
@@ -134,12 +67,13 @@ class FilingRequest(BaseModel):
             raise ValueError("Identifier cannot be empty")
 
         # CIK validation (numeric string)
-        if v.isdigit():
-            if not 1 <= len(v) <= 10:
-                raise ValueError("CIK must be 1-10 digits")
-        # Ticker symbol validation (1-5 alphanumeric characters)
-        elif not (1 <= len(v) <= 5 and v.isalnum()):
-            raise ValueError("Ticker must be 1-5 alphanumeric characters")
+        for i in v:
+            if i.isdigit():
+                if not 1 <= len(i) <= 10:
+                    raise ValueError(f"CIK must be 1-10 digits: {i}")
+            # Ticker symbol validation (1-5 alphanumeric characters)
+            elif not (1 <= len(i) <= 5 and i.isalnum()):
+                raise ValueError(f"Ticker must be 1-5 alphanumeric characters: {i}")
 
         return v
 
@@ -169,17 +103,14 @@ class EDGARFetcher(IDataFetcher):
         if not self.api_key:
             raise ValueError("SEC API key is not set")
 
-        self.base_url = "https://archive.sec-api.io"
-        self.pdf_generator_url = "https://api.sec-api.io/filing-reader"
         self.query_url = "https://api.sec-api.io"
-        self.download_url = "https://api.sec-api.io/filing-download"
         self.session = None
 
         # Create cache directory for storing downloaded filings
         self.cache_dir = Path("cache/sec_filings")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    async def fetch(self, identifier: str, **kwargs) -> List[SECFiling]:
+    async def fetch(self, identifiers: List[str], **kwargs) -> List[SECFiling]:
         """
         Fetch SEC filings for a given identifier.
 
@@ -200,10 +131,8 @@ class EDGARFetcher(IDataFetcher):
         try:
             # Create and validate request model
             request = FilingRequest(
-                identifier=identifier,
-                filing_type=kwargs.get("filing_type"),
-                date=kwargs.get("date"),
-                data_format=kwargs.get("data_format", DataFormat.PDF),
+                identifier=identifiers,
+                **kwargs,
             )
         except ValueError as e:
             raise ValidationError(str(e), field=e.args[1] if len(e.args) > 1 else None)
@@ -212,11 +141,6 @@ class EDGARFetcher(IDataFetcher):
         search_query = self._build_search_query(request)
 
         # Log detailed information
-        logger.info(f"SEC API Query: {search_query}")
-        logger.info(
-            f"SEC API KEY (first 4 chars): {self.api_key[:4] if self.api_key else 'None'}"
-        )
-        logger.info(f"API Endpoint: {self.query_url}")
         logger.info(
             f"Querying SEC API for {request.identifier} filings with payload: {json.dumps(search_query)}"
         )
@@ -224,22 +148,16 @@ class EDGARFetcher(IDataFetcher):
         # Fetch filings from SEC API
         filings_data = await self._fetch_filings_from_api(search_query)
 
-        # Filter filings based on date if specified
-        if request.date:
-            processed_filings = self._filter_filings_by_date(
-                processed_filings, request.date
-            )
-
         # Process the filings based on requested data format
-        processed_filings = filings_data
-        if request.data_format == DataFormat.PDF:
-            # Download PDFs for filings
-            processed_filings = await self._process_pdf_filings(filings_data)
-        # else:
-        # Get HTML content for filings
-        # processed_filings = await self._process_html_filings(filings_data)
+        # processed_filings = filings_data
+        # if request.data_format == DataFormat.PDF:
+        #     # Download PDFs for filings
+        #     processed_filings = await self._process_pdf_filings(filings_data)
+        # # else:
+        # # Get HTML content for filings
+        # # processed_filings = await self._process_html_filings(filings_data)
 
-        return processed_filings
+        return filings_data
 
     def _build_search_query(self, request: FilingRequest) -> Dict[str, Any]:
         """
@@ -252,26 +170,49 @@ class EDGARFetcher(IDataFetcher):
             Dictionary with search query for SEC API
         """
         # Define query components
-        query_parts = []
+        lucene_query = {
+            "AND": [],
+            "OR": [],
+        }
 
         # Add identifier query (CIK or ticker)
-        identifier_field = "cik" if request.identifier.isdigit() else "ticker"
-        query_parts.append(f"{identifier_field}:{request.identifier}")
+        cik = []
+        ticker = []
+        for i_d in request.identifier:
+            if i_d.isdigit():
+                cik.append(i_d)
+            else:
+                ticker.append(i_d)
+        lucene_query["OR"].append(f"cik:{tuple(cik)}") if len(cik) > 0 else None
+        (
+            lucene_query["OR"].append(f"ticker:{tuple(ticker)}")
+            if len(ticker) > 0
+            else None
+        )
 
         # Add filing type if specified
         if request.filing_type:
-            query_parts.append(f'formType:"{request.filing_type}"')
+            lucene_query["AND"].append(f"formType:{request.filing_type}")
 
         # Add date range if specified
-        if request.date:
-            date_str = request.date.isoformat()
-            query_parts.append(f"filedAt:[{date_str} TO {date_str}T23:59:59]")
+        if request.start_date and request.end_date:
+            start_date = request.start_date.isoformat()
+            end_date = request.end_date.isoformat()
+            lucene_query["AND"].append(f"filedAt:[{start_date} TO {end_date}]")
+        elif request.start_date:
+            start_date = request.start_date.isoformat()
+            lucene_query["AND"].append(f"filedAt:[{start_date} TO *]")
+        elif request.end_date:
+            end_date = request.end_date.isoformat()
+            lucene_query["AND"].append(f"filedAt:[* TO {end_date}]")
 
         # Build final query
+        lucene_query["OR"] = " OR ".join(lucene_query["OR"])
+        lucene_query["AND"] = " AND ".join(lucene_query["AND"])
         search_query = {
-            "query": " AND ".join(query_parts),
+            "query": " AND ".join(lucene_query.values()),
             "from": "0",
-            "size": "1",
+            "size": request.max_size,
             "sort": [{"filedAt": {"order": "desc"}}],
         }
 
@@ -309,7 +250,13 @@ class EDGARFetcher(IDataFetcher):
                     if response.status == 200:
                         result = await response.json()
                         filings = result.get("filings", [])
-                        return self._convert_api_results_to_filings(filings)
+                        try:
+                            filings = models.sec_api_query_response_schema.validate(
+                                filings
+                            )
+                        except Exception as e:
+                            logger.error(f"Error creating SECFiling model: {str(e)}")
+                        return filings
                     elif response.status == 401:
                         raise DataFetchError(
                             "Invalid API key or authorization failed", "SEC API", 401
@@ -334,423 +281,3 @@ class EDGARFetcher(IDataFetcher):
             if not isinstance(e, DataFetchError):
                 raise DataFetchError(f"Unexpected error: {str(e)}", "SEC API")
             raise
-
-    def _convert_api_results_to_filings(
-        self, filings_data: List[Dict[str, Any]]
-    ) -> List[SECFiling]:
-        """
-        Convert API results to SECFiling objects.
-
-        Args:
-            filings_data: List of filing data dictionaries from SEC API
-
-        Returns:
-            List of SECFiling objects
-        """
-        filings = []
-        for filing in filings_data:
-            # Extract document URL from documentFormatFiles if available
-            doc_url = None
-            if filing.get("documentFormatFiles"):
-                for doc in filing.get("documentFormatFiles", []):
-                    if doc.get("type") == filing.get("formType"):
-                        doc_url = doc.get("documentUrl")
-                        break
-
-            # Create SECFiling model instance
-            try:
-                filing_data = SECFiling(
-                    accessionNo=filing.get("accessionNo"),
-                    formType=filing.get("formType"),
-                    filedAt=filing.get("filedAt"),
-                    company_name=filing.get("companyName"),
-                    ticker=filing.get("ticker"),
-                    cik=filing.get("cik"),
-                    documentURL=self._convert_to_sec_gov_url(doc_url),
-                    linkToTxt=filing.get("linkToTxt"),
-                )
-                filings.append(filing_data)
-            except Exception as e:
-                logger.error(f"Error creating SECFiling model: {str(e)}")
-                continue
-
-        return filings
-
-    async def _process_pdf_filings(self, filings: List[SECFiling]) -> List[SECFiling]:
-        """
-        Process filings to download PDF versions.
-
-        Args:
-            filings: List of SECFiling objects
-
-        Returns:
-            List of SECFiling objects with PDF content and local file paths
-        """
-        logger.info(f"Processing {len(filings)} filings for PDF download")
-
-        processed_filings = []
-        for filing in filings:
-            try:
-                if not filing.documentURL:
-                    logger.warning(
-                        f"Missing document URL for {filing.ticker} {filing.formType}"
-                    )
-                    continue
-
-                # Generate a cache path for this filing
-                cache_path = self._get_cache_path(filing)
-
-                # Check if we already have this filing cached
-                if cache_path.exists():
-                    logger.info(
-                        f"Using cached PDF for {filing.ticker} {filing.formType} from {filing.filing_date}"
-                    )
-                    # Add the file path to the filing object
-                    filing.pdf_path = str(cache_path)
-                    processed_filings.append(filing)
-                    continue
-
-                # Convert URL to SEC.gov format for PDF generation
-                sec_url = self._convert_to_sec_gov_url(filing.documentURL)
-                if not sec_url:
-                    logger.warning(f"Invalid document URL format: {filing.documentURL}")
-                    continue
-
-                logger.info(
-                    f"Downloading {filing.formType} filing for {filing.ticker} from {filing.filing_date} as PDF"
-                )
-
-                # Download the filing as PDF
-                pdf_data = await self._download_filing_as_pdf(sec_url)
-
-                if pdf_data:
-                    # Save to cache
-                    with open(cache_path, "wb") as f:
-                        f.write(pdf_data)
-
-                    # Add the file path to the filing object
-                    filing.pdf_path = str(cache_path)
-
-                    # Save metadata for future reference
-                    self._save_filing_metadata(filing, cache_path, "pdf")
-
-                    logger.info(
-                        f"Successfully downloaded and cached PDF for {filing.ticker} {filing.formType}"
-                    )
-                    processed_filings.append(filing)
-                else:
-                    logger.error(
-                        f"Failed to download PDF for {filing.ticker} {filing.formType}"
-                    )
-            except Exception as e:
-                logger.error(
-                    f"Error processing PDF for {filing.ticker} {filing.formType}: {e}"
-                )
-
-        return processed_filings
-
-    def _get_cache_path(self, filing: SECFiling) -> Path:
-        """
-        Generate a cache file path for a filing.
-
-        Args:
-            filing: SECFiling object
-
-        Returns:
-            Path object for the cache file location
-        """
-        # Create a unique filename based on filing metadata
-        filing_date_str = filing.filing_date.strftime("%Y-%m-%d")
-        # Replace any slashes in formType with hyphens for valid filenames
-        clean_form_type = filing.formType.replace("/", "-")
-        filename = f"{filing.ticker}_{clean_form_type}_{filing.accessionNo}.pdf"
-
-        # Create a subdirectory for the ticker to organize cache
-        ticker_dir = self.cache_dir / filing.ticker
-        ticker_dir.mkdir(exist_ok=True)
-
-        return ticker_dir / filename
-
-    def _convert_to_sec_gov_url(self, url: str) -> Optional[str]:
-        """
-        Convert an API URL to a SEC.gov URL format.
-
-        The PDF Generator API requires URLs in the SEC.gov format.
-
-        Args:
-            url: The URL to convert
-
-        Returns:
-            SEC.gov formatted URL if conversion is successful, None otherwise
-        """
-        # If it's already a SEC.gov URL, return it as is
-        if url.startswith("https://www.sec.gov/"):
-            # Remove inline XBRL parameters if present
-            return url.replace("/ix?doc=", "")
-
-        # If it's a URL from the SEC API
-        if "sec-api.io" in url:
-            # Extract the path after /Archives/
-            parts = url.split("/Archives/")
-            if len(parts) > 1:
-                return f"https://www.sec.gov/Archives/{parts[1]}"
-
-        # If we can't convert it, return None
-        logger.warning(f"Could not convert URL to SEC.gov format: {url}")
-        return None
-
-    async def _make_http_request(
-        self,
-        url: str,
-        params: Optional[Dict[str, Any]] = None,
-        timeout: int = 30,
-        binary: bool = False,
-        max_retries: int = 3,
-    ) -> Optional[Union[str, bytes]]:
-        """
-        Make an HTTP request with retry logic.
-
-        Args:
-            url: URL to request
-            params: Optional query parameters
-            timeout: Request timeout in seconds
-            binary: Whether to return binary data or text
-            max_retries: Maximum number of retry attempts
-
-        Returns:
-            Response content as string or bytes, or None if failed
-        """
-        retry_delay = 2
-
-        for attempt in range(max_retries):
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        url, params=params, timeout=timeout
-                    ) as response:
-                        if response.status == 200:
-                            return (
-                                await response.read()
-                                if binary
-                                else await response.text()
-                            )
-                        elif response.status == 429:  # Too Many Requests
-                            logger.warning(
-                                f"Rate limit hit, retrying in {retry_delay} seconds"
-                            )
-                            await asyncio.sleep(retry_delay)
-                            retry_delay *= 2  # Exponential backoff
-                        else:
-                            error_text = await response.text()
-                            logger.error(
-                                f"API error: {url}, {response.status}, {error_text}"
-                            )
-                            return None
-            except Exception as e:
-                logger.error(f"Error during HTTP request: {e}")
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2
-
-        logger.error(f"Failed to complete HTTP request after {max_retries} attempts")
-        return None
-
-    async def _download_filing_as_pdf(self, sec_url: str) -> Optional[bytes]:
-        """
-        Download a SEC filing as a PDF using the PDF Generator API.
-
-        Args:
-            sec_url: The SEC.gov URL of the filing to download
-
-        Returns:
-            Binary PDF data if successful, None otherwise
-        """
-        params = {
-            "token": self.api_key,
-            "url": sec_url,
-            "quality": "high",  # High quality PDFs
-        }
-
-        return await self._make_http_request(
-            url=self.pdf_generator_url,
-            params=params,
-            timeout=60,  # Longer timeout for PDF generation
-            binary=True,
-        )
-
-    def _save_filing_metadata(
-        self, filing: SECFiling, file_path: Path, metadata_type: str
-    ) -> None:
-        """
-        Save filing metadata for future reference.
-
-        Args:
-            filing: SECFiling object
-            file_path: Path to the cached file (PDF or HTML)
-            metadata_type: Type of metadata to save ('pdf' or 'html')
-        """
-        metadata = {
-            "ticker": filing.ticker,
-            "filing_type": filing.formType,
-            "filing_date": filing.filing_date.isoformat(),
-            "accession_no": filing.accessionNo,
-            "document_url": filing.documentURL,
-            "text_url": filing.textURL,
-            "company_name": filing.company_name,
-            "cik": filing.cik,
-            "cached_at": datetime.now().isoformat(),
-            "metadata_type": metadata_type,
-        }
-
-        # Add the specific file path based on metadata type
-        if metadata_type == "pdf":
-            metadata["pdf_path"] = str(file_path)
-        elif metadata_type == "html":
-            metadata["html_path"] = str(file_path)
-
-        # Create metadata directory if it doesn't exist
-        metadata_dir = self.cache_dir / "metadata"
-        metadata_dir.mkdir(exist_ok=True)
-
-        # Create a unique filename for the metadata
-        metadata_filename = f"{filing.ticker}_{filing.formType}_{filing.accessionNo}_{metadata_type}.json"
-        metadata_path = metadata_dir / metadata_filename
-
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
-
-    async def _process_html_filings(self, filings: List[SECFiling]) -> List[SECFiling]:
-        """
-        Process filings to retrieve HTML content.
-
-        Args:
-            filings: List of SECFiling objects
-
-        Returns:
-            List of SECFiling objects with HTML content
-        """
-        logger.info(f"Processing {len(filings)} filings for HTML retrieval")
-
-        processed_filings = []
-        for filing in filings:
-            try:
-                if not filing.textURL:
-                    logger.warning(
-                        f"Missing text URL for {filing.ticker} {filing.formType}"
-                    )
-                    continue
-
-                # Generate a cache path for this filing's HTML content
-                cache_path = self._get_html_cache_path(filing)
-
-                # Check if we already have this filing cached
-                if cache_path.exists():
-                    logger.info(
-                        f"Using cached HTML for {filing.ticker} {filing.formType} from {filing.filing_date}"
-                    )
-                    # Add the file path to the filing object for reference
-                    filing.html_path = str(cache_path)
-                    processed_filings.append(filing)
-                    continue
-
-                logger.info(
-                    f"Retrieving HTML content for {filing.formType} filing for {filing.ticker} from {filing.filing_date}"
-                )
-
-                # Retrieve the HTML content
-                # Extract the path after "edgar/data" from the document URL
-                if "edgar/data" in filing.documentURL:
-                    # Extract the path after "edgar/data"
-                    path_parts = filing.documentURL.split("edgar/data")
-                    if len(path_parts) > 1:
-                        # Construct the archive URL with the extracted path
-                        archive_url = f"https://archive.sec-api.io/{path_parts[1]}?token={self.api_key}"
-                        filing.textURL = archive_url
-                    else:
-                        logger.warning(
-                            f"Could not extract path from document URL: {filing.documentURL}"
-                        )
-                else:
-                    logger.warning(
-                        f"Document URL does not contain 'edgar/data': {filing.documentURL}"
-                    )
-                html_content = await self._fetch_filing_html(filing.textURL)
-
-                if html_content:
-                    # Save to cache
-                    with open(cache_path, "w", encoding="utf-8") as f:
-                        f.write(html_content)
-
-                    # Add the file path to the filing object for reference
-                    filing.html_path = str(cache_path)
-
-                    # Save metadata for future reference
-                    self._save_filing_metadata(filing, cache_path, "html")
-
-                    logger.info(
-                        f"Successfully retrieved and cached HTML for {filing.ticker} {filing.formType}"
-                    )
-                    processed_filings.append(filing)
-                else:
-                    logger.error(
-                        f"Failed to retrieve HTML for {filing.ticker} {filing.formType}"
-                    )
-            except Exception as e:
-                logger.error(
-                    f"Error processing HTML for {filing.ticker} {filing.formType}: {e}"
-                )
-
-        return processed_filings
-
-    def _get_html_cache_path(self, filing: SECFiling) -> Path:
-        """
-        Generate a cache file path for a filing's HTML content.
-
-        Args:
-            filing: SECFiling object
-
-        Returns:
-            Path object for the HTML cache file location
-        """
-        # Create a unique filename based on filing metadata
-        filing_date_str = filing.filing_date.strftime("%Y-%m-%d")
-        filename = f"{filing.ticker}_{filing.formType}_{filing.accessionNo}.html"
-
-        # Create a subdirectory for HTML files
-        html_dir = self.cache_dir / "html" / filing.ticker
-        html_dir.mkdir(parents=True, exist_ok=True)
-
-        return html_dir / filename
-
-    async def _fetch_filing_html(self, url: str) -> Optional[str]:
-        """
-        Fetch the HTML content of a filing.
-
-        Args:
-            url: URL to the filing's text or HTML version
-
-        Returns:
-            HTML content as string if successful, None otherwise
-        """
-        return await self._make_http_request(url=url, timeout=30, binary=False)
-
-    def _filter_filings_by_date(
-        self, filings: List[SECFiling], target_date: Date
-    ) -> List[SECFiling]:
-        """
-        Filter filings by date.
-
-        Args:
-            filings: List of SECFiling objects
-            target_date: Date to filter by
-
-        Returns:
-            Filtered list of SECFiling objects
-        """
-        filtered_filings = []
-        target_datetime = datetime.combine(target_date, datetime.min.time())
-
-        for filing in filings:
-            if filing.filing_date.date() == target_date:
-                filtered_filings.append(filing)
-
-        return filtered_filings

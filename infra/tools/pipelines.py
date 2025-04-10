@@ -7,7 +7,7 @@ These tools allow agents to use pipelines as building blocks for complex workflo
 """
 
 import datetime
-from typing import Any, ClassVar, Dict, List, Type, Optional
+from typing import Any, ClassVar, Dict, List, Optional, Type
 
 from pydantic import BaseModel, Field
 
@@ -140,7 +140,7 @@ class RAGQueryToolInput(BaseModel):
         - "similarity" (default): Standard vector similarity search
         - "mmr": Maximum Marginal Relevance search for diversity
         - "similarity_score_threshold": Similarity search with score filtering
-        """
+        """,
     )
 
 
@@ -235,5 +235,5 @@ class RAGQueryTool(PipelineTool):
         return await self._pipeline.run(
             task_description=task_description,
             retriever_search_type=retriever_search_type,
-            retriever_search_kwargs=search_kwargs
+            retriever_search_kwargs=search_kwargs,
         )

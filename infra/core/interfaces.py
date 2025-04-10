@@ -32,12 +32,12 @@ class IDataFetcher(ABC):
     """
 
     @abstractmethod
-    async def fetch(self, identifier: str, **kwargs) -> Any:
+    async def fetch(self, identifiers: List[str], **kwargs) -> Any:
         """
         Fetch data for a given identifier.
 
         Args:
-            identifier: Unique identifier for the data to fetch (e.g., ticker symbol)
+            identifier: List of unique identifiers for the data to fetch (e.g., ticker symbol)
             **kwargs: Additional parameters specific to the data source
 
         Returns:
@@ -129,7 +129,7 @@ class IDocumentLoader(ABC):
     """
 
     @abstractmethod
-    async def load(self, source: List[Any]) -> List[Document]:
+    async def load(self, sources: List[Any]) -> List[Document]:
         """
         Loads content from the given URI into Document objects.
 

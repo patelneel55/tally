@@ -1,5 +1,6 @@
 from infra.core.interfaces import IOutputFormatter
 
+
 class SimpleTextOutputFormatter(IOutputFormatter):
     def get_parser(self):
         # Simple parser that just returns the text

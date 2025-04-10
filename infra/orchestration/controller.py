@@ -10,14 +10,19 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
-from infra.agents.base import IAgent
-from infra.core.interfaces import IEmbeddingProvider, ILLMProvider, IOutputFormatter, IVectorStore
+from infra.agents.base import IAgent, LangChainAgent
+from infra.core.interfaces import (
+    IEmbeddingProvider,
+    ILLMProvider,
+    IOutputFormatter,
+    IVectorStore,
+)
+from infra.output.simple import SimpleTextOutputFormatter
 from infra.pipelines.indexing_pipeline import IndexingPipeline
 from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
+
 # from infra.tools.debug_tools import EchoTool
 from infra.tools.pipelines import IndexingPipelineTool, RAGQueryTool
-from infra.output.simple import SimpleTextOutputFormatter
-from infra.agents.base import LangChainAgent
 
 # from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
 # from infra.tools.debug_tools import EchoTool
@@ -139,13 +144,10 @@ class HybridController:
             llm_provider=self.llm_provider,
             output_formatter=SimpleTextOutputFormatter(),
             vector_store=self.vector_store,
-            embedding_provider=self.embedding_provider
+            embedding_provider=self.embedding_provider,
         )
 
-        return {
-            "indexing_pipeline": indexing_pipeline,
-            "rag_pipeline": rag_pipeline
-        }
+        return {"indexing_pipeline": indexing_pipeline, "rag_pipeline": rag_pipeline}
 
     def _initialize_pipeline_patterns(self) -> List[PipelinePattern]:
         """
@@ -165,7 +167,7 @@ class HybridController:
         rag_pattern = PipelinePattern(
             pattern=r"(?i)(?:query|ask|analyze|search)(?:\s+about)?\s+(.+?)(?:\s+for\s+([A-Z]+))?(?:\.|$)",
             pipeline_name="rag_pipeline",
-            param_extractor=self._extract_rag_params
+            param_extractor=self._extract_rag_params,
         )
 
         return [indexing_pattern, rag_pattern]

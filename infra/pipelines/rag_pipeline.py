@@ -1,5 +1,10 @@
 from typing import Any, Dict, List
 
+from langchain_core.documents import Document
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+
 from infra.core.interfaces import (
     IEmbeddingProvider,
     ILLMProvider,
@@ -7,11 +12,6 @@ from infra.core.interfaces import (
     IPromptStrategy,
     IVectorStore,
 )
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-from langchain_core.language_models import BaseLanguageModel
-
 
 
 class RAGFinancialAnalysisPipeline:
@@ -40,7 +40,14 @@ class RAGFinancialAnalysisPipeline:
             self._llm_instance = self.llm_provider.get_model()
         return self._llm_instance
 
-    async def run(self, task_description: str, prompt_context: Dict[str, Any] = None, filters: Dict[str, Any] = None, retriever_search_type: str = "similarity", retriever_search_kwargs: Dict[str, Any] = None) -> str:
+    async def run(
+        self,
+        task_description: str,
+        prompt_context: Dict[str, Any] = None,
+        filters: Dict[str, Any] = None,
+        retriever_search_type: str = "similarity",
+        retriever_search_kwargs: Dict[str, Any] = None,
+    ) -> str:
         print(f"Starting RAG pipeline for task: {task_description}")
         prompt_context = prompt_context or {}
 
@@ -55,7 +62,9 @@ class RAGFinancialAnalysisPipeline:
             print(f"Applying filters to retrieval: {filters}")
             search_kwargs["filter"] = filters
 
-        print(f"Using search type: {retriever_search_type}, search parameters: {search_kwargs}")
+        print(
+            f"Using search type: {retriever_search_type}, search parameters: {search_kwargs}"
+        )
 
         retriever = self.vector_store.as_retriever(
             embeddings=embeddings,
@@ -65,8 +74,7 @@ class RAGFinancialAnalysisPipeline:
 
         # 2. Create Prompt Template directly
         # Create a system and human message template
-        system_template = (
-            """
+        system_template = """
 You are a financial analysis assistant tasked with answering user questions using only the context provided below.
 This context has been retrieved from official SEC filings (10-K, 10-Q, or 8-K) for the specified company.
 
@@ -85,7 +93,6 @@ Important Guidelines:
 
 Answer as a professional equity research analyst would: clear, precise, and factually grounded.
         """
-        )
 
         human_template = """Context information is below.
 ---------------------
@@ -97,10 +104,12 @@ Given the context information and no prior knowledge, answer the following quest
 """
 
         # Create prompt template from messages
-        prompt_template = ChatPromptTemplate.from_messages([
-            ("system", system_template),
-            ("human", human_template),
-        ])
+        prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_template),
+                ("human", human_template),
+            ]
+        )
 
         # Retrieve LLM
         llm = self._llm()

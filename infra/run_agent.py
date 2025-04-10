@@ -15,8 +15,9 @@ sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 import argparse
 import asyncio
 import logging
-import sys
 import os
+import sys
+
 from infra.acquisition.sec_fetcher import DataFormat, FilingType
 
 # from infra.agents.base import LangChainAgent
@@ -53,9 +54,8 @@ def write_to_file(result: str):
         f.write("# OUTPUT\n")
         f.write(f"{result.get('output')}\n\n")
 
-    logger.info(
-        f"Analysis to {output_path}"
-    )
+    logger.info(f"Analysis to {output_path}")
+
 
 async def run_examples(controller, general_agent, args):
     """Run example tasks using the hybrid controller and agent."""
@@ -63,9 +63,7 @@ async def run_examples(controller, general_agent, args):
     # Example 1: Direct pipeline execution via pattern matching
     if args.example == "all" or args.example == "1":
         logger.info("\n\n===== EXAMPLE 1: DIRECT PIPELINE EXECUTION =====")
-        indexing_task = (
-            "Index the annual SEC filings for GS from Jan 2024 to Jan 2025"
-        )
+        indexing_task = "Index the annual SEC filings for GS from Jan 2024 to Jan 2025"
         try:
             logger.info(f"Running task: {indexing_task}")
             result = await controller.process(indexing_task)
