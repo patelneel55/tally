@@ -33,7 +33,20 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = Field(..., alias="OPENAI_API_KEY")
     POLYGON_API_KEY: str = Field(..., alias="POLYGON_API_KEY")
 
-    CACHE: str = Field("cache", alias="CACHE_DIR")
+    LOCAL_CACHE_DIR: str = Field("cache", alias="CACHE_DIR")
+    USE_LOCAL_CACHE: bool = Field(False, alias="USE_LOCAL_CACHE")
+
+    # Database configuration - connection string for the database
+    # This should be set to a valid database URL
+    # e.g., "postgresql://user:password@localhost/dbname"
+    #
+    # The databases will be used for caching and storing all relevant
+    # data for the infrastructure
+    DB_ENGINE_URL: str = Field(..., alias="DB_ENGINE_URL")
+
+    SEC_API_CACHE_EXPIRATION: int = Field(
+        60 * 60 * 24, alias="SEC_API_CACHE_EXPIRATION"
+    )  # 1 day in seconds
 
 
 settings = Settings()

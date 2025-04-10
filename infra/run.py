@@ -27,7 +27,7 @@ from infra.vector_stores.chromadb import ChromaVectorStore
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -71,39 +71,39 @@ if __name__ == "__main__":
 
             # Fetch filings
             filings = await fetcher.fetch(
-                identifier=ticker, filing_type=doc_type, data_format=DataFormat.HTML
+                identifiers=[ticker], filing_type=doc_type, data_format=DataFormat.HTML
             )
             logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
 
-            docs = await loader.load(filings)
-            print(f"Number of documents: {len(docs)}")
-            save_docs(docs, "load", ticker, doc_type, "html")
+            # docs = await loader.load(filings)
+            # print(f"Number of documents: {len(docs)}")
+            # save_docs(docs, "load", ticker, doc_type, "html")
 
-            documents = parser.parse(docs)
-            print(f"Number of documents: {len(documents)}")
-            save_docs(documents, "parse", ticker, doc_type, "md")
+            # documents = parser.parse(docs)
+            # print(f"Number of documents: {len(documents)}")
+            # save_docs(documents, "parse", ticker, doc_type, "md")
 
-            split_docs = await splitter.split_documents(documents)
-            print(f"Number of documents: {len(split_docs)}")
-            save_docs(split_docs, "split", ticker, doc_type, "md")
-
-            embedding_model = embeddings.get_embedding_model()
-            # vector_store.add_documents(split_docs, embedding_model)
+            # split_docs = await splitter.split_documents(documents)
             # print(f"Number of documents: {len(split_docs)}")
+            # save_docs(split_docs, "split", ticker, doc_type, "md")
 
-            retriever = vector_store.as_retriever(
-                embeddings=embedding_model,
-                search_kwargs={
-                    "k": 5,
-                    # "filter": {
-                    #     "type": "TableElement"
-                    # },
-                },
-            )
-            retrieved_docs = retriever.invoke(
-                "How does Goldman Sachs make money from market making activities?"
-            )
-            save_docs(retrieved_docs, "retrieve", ticker, doc_type, "md")
+            # embedding_model = embeddings.get_embedding_model()
+            # # vector_store.add_documents(split_docs, embedding_model)
+            # # print(f"Number of documents: {len(split_docs)}")
+
+            # retriever = vector_store.as_retriever(
+            #     embeddings=embedding_model,
+            #     search_kwargs={
+            #         "k": 5,
+            #         # "filter": {
+            #         #     "type": "TableElement"
+            #         # },
+            #     },
+            # )
+            # retrieved_docs = retriever.invoke(
+            #     "How does Goldman Sachs make money from market making activities?"
+            # )
+            # save_docs(retrieved_docs, "retrieve", ticker, doc_type, "md")
             return None
         except Exception as e:
             logger.error(f"Error fetching {ticker} {doc_type.value} filings: {e}")

@@ -102,7 +102,7 @@ sec_api_query_response_schema = Schema(
                 "documentFormatFiles": Or(
                     [
                         {
-                            "formType": And(str, len),
+                            "type": And(str, len),
                             "documentUrl": And(str, len),
                         }
                     ],
@@ -119,14 +119,14 @@ sec_api_query_response_schema = Schema(
                     ticker=x["ticker"],
                     cik=x["cik"],
                     documentURL=next(
-                        d["documentURL"]
+                        d["documentUrl"]
                         for d in x["documentFormatFiles"]
-                        if d.get("formType") == x["formType"]
+                        if d["type"] == x["formType"]
                     ),
                 ),
-                ignore_extra_keys=True,
             ),
             ignore_extra_keys=True,
         )
-    ]
+    ],
+    ignore_extra_keys=True,
 )

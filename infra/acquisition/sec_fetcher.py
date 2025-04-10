@@ -33,6 +33,8 @@ from infra.acquisition.models import DataFormat, FilingType, SECFiling
 from infra.core.config import settings
 from infra.core.exceptions import DataFetchError, ValidationError
 from infra.core.interfaces import IDataFetcher
+from infra.databases.cache import Cache, CacheValueType
+from infra.databases.engine import sqlalchemy_engine
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -106,9 +108,11 @@ class EDGARFetcher(IDataFetcher):
         self.query_url = "https://api.sec-api.io"
         self.session = None
 
-        # Create cache directory for storing downloaded filings
-        self.cache_dir = Path("cache/sec_filings")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache = Cache(
+            sqlalchemy_engine,
+            table_name="sec_filings",
+            value_type=CacheValueType.Pickle,
+        )
 
     async def fetch(self, identifiers: List[str], **kwargs) -> List[SECFiling]:
         """
@@ -137,6 +141,12 @@ class EDGARFetcher(IDataFetcher):
         except ValueError as e:
             raise ValidationError(str(e), field=e.args[1] if len(e.args) > 1 else None)
 
+        request_hash = self._cache.generate_id(request.model_dump())
+        filings = self._cache.get(request_hash)
+        if filings:
+            logger.debug("Cache hit. Returning cached filings.")
+            return filings
+
         # Get search query for SEC API
         search_query = self._build_search_query(request)
 
@@ -148,15 +158,11 @@ class EDGARFetcher(IDataFetcher):
         # Fetch filings from SEC API
         filings_data = await self._fetch_filings_from_api(search_query)
 
-        # Process the filings based on requested data format
-        # processed_filings = filings_data
-        # if request.data_format == DataFormat.PDF:
-        #     # Download PDFs for filings
-        #     processed_filings = await self._process_pdf_filings(filings_data)
-        # # else:
-        # # Get HTML content for filings
-        # # processed_filings = await self._process_html_filings(filings_data)
-
+        self._cache.write(
+            request_hash,
+            filings_data,
+            ttl=settings.SEC_API_CACHE_EXPIRATION,
+        )
         return filings_data
 
     def _build_search_query(self, request: FilingRequest) -> Dict[str, Any]:
