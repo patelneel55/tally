@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
         try:
             fetcher = EDGARFetcher()
-            loader = WebLoader(crawl_strategy="all", max_crawl_depth=0)
+            loader = WebLoader(crawl_strategy="all", max_crawl_depth=2)
             parser = SECParser()
             llm_provider = OpenAIProvider()
             splitter = SECSplitter(llm_provider=llm_provider)
@@ -75,9 +75,9 @@ if __name__ == "__main__":
             )
             logger.info(f"Found {len(filings)} {doc_type.value} filings for {ticker}")
 
-            # docs = await loader.load(filings)
-            # print(f"Number of documents: {len(docs)}")
-            # save_docs(docs, "load", ticker, doc_type, "html")
+            docs = await loader.load(filings)
+            print(f"Number of documents: {len(docs)}")
+            save_docs(docs, "load", ticker, doc_type, "html")
 
             # documents = parser.parse(docs)
             # print(f"Number of documents: {len(documents)}")

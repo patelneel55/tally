@@ -1,3 +1,4 @@
+import hashlib
 import json  # Added for JSON support
 import logging
 import os
@@ -29,7 +30,6 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
-import hashlib
 
 from infra.core.config import settings
 
@@ -50,32 +50,19 @@ class Cache:
     """
     A flexible caching implementation using SQLAlchemy, supporting dynamic table
     creation and different value storage types.
-
-    Supported value_types:
-    - 'pickle': Stores any pickleable Python object (default). Security warning applies.
-    - 'bytes': Stores raw bytes directly. Value must be bytes.
-    - 'text': Stores large string data using SQLAlchemy Text type. Value must be str.
-    - 'json_text': Stores JSON-serializable data as a JSON string in a Text column.
     """
 
     _orm_models: Dict[str, Type[Base]] = (
         {}
     )  # Class-level cache for generated ORM models
 
-    def __init__(
-        self,
-        engine: Engine,
-        table_name: str,
-        value_type: CacheValueType = CacheValueType.Text,
-        key_length: int = 512,
-    ):
+    def __init__(self, engine: Engine, table_name: str, column_mapping: Dict = None):
         """
         Initializes the Cache for a specific table and value type.
 
         Args:
             engine: A configured SQLAlchemy Engine instance.
             table_name: The name of the table to use for this cache instance.
-            value_type: The type of value to store ('pickle', 'bytes', 'text', 'json_text').
             key_length: Max length for the cache key string column.
 
         Raises:
@@ -85,24 +72,17 @@ class Cache:
         """
         if not isinstance(engine, Engine):
             raise TypeError("engine must be a valid SQLAlchemy Engine instance.")
-        if not isinstance(key_length, int) or key_length <= 0:
-            raise ValueError("key_length must be a positive integer.")
-
         self.engine = engine
         self.table_name = table_name
-        self.value_type = value_type
-        self.key_length = key_length
 
         # Get or create the dynamic ORM model for this table/type combination
         self._cache_model = self._get_or_create_cache_model(
-            table_name, value_type, key_length
+            table_name, column_mapping=column_mapping
         )
 
         # Create table if it doesn't exist using this specific model's metadata
         try:
-            logger.info(
-                f"Ensuring cache table '{self.table_name}' (Value type: {self.value_type.value}) exists..."
-            )
+            logger.info(f"Ensuring cache table '{self.table_name}' exists...")
             # Create only the specific table associated with this model
             self._cache_model.metadata.create_all(
                 self.engine, tables=[self._cache_model.__table__]
@@ -121,12 +101,14 @@ class Cache:
         self._SessionLocal = sessionmaker(
             autocommit=False, autoflush=False, bind=self.engine
         )
-        logger.info(
-            f"Cache initialized for table '{self.table_name}' with value type '{self.value_type.value}'."
-        )
+        logger.info(f"Cache initialized for table '{self.table_name}'.")
 
         if settings.USE_LOCAL_CACHE:
             self.cache_dir = Path(settings.LOCAL_CACHE_DIR) / self.table_name
+
+    @classmethod
+    def as_dict(cls, instance):
+        return {c.name: getattr(instance, c.name) for c in instance.__table__.columns}
 
     @classmethod
     def generate_id(cls, data: Any) -> str:
@@ -141,57 +123,33 @@ class Cache:
 
     @classmethod
     def _get_or_create_cache_model(
-        cls, table_name: str, value_type: CacheValueType, key_length: int
+        cls, table_name: str, column_mapping: Dict
     ) -> Type[Base]:
         """Dynamically creates or retrieves a SQLAlchemy ORM model class."""
-        model_key = f"{table_name}_{value_type}"
+        model_key = f"{table_name}"
         if model_key in cls._orm_models:
             return cls._orm_models[model_key]
 
-        logger.debug(
-            f"Creating dynamic ORM model for table '{table_name}', value type '{value_type}'"
-        )
-
-        # Determine the SQLAlchemy type for the value column
-        if value_type == CacheValueType.Pickle:
-            value_column_type = PickleType
-        elif value_type == CacheValueType.Bytes:
-            value_column_type = LargeBinary
-        elif value_type == CacheValueType.Text:
-            value_column_type = UnicodeText
-        else:
-            raise ValueError(f"Internal error: Unsupported value_type '{value_type}'")
+        logger.debug(f"Creating dynamic ORM model for table '{table_name}'")
 
         # Dynamically create the class using type()
         # Ensure Base is the same instance across all models if mixing in one app
-        model_name = (
-            f"{table_name.capitalize()}Entry"
-        )
-        DynamicCacheEntry = type(
-            model_name,
-            (Base,),  # Inherit from the common Base
-            {
-                "__tablename__": table_name,
-                # Define columns using Mapped/mapped_column
-                "key": mapped_column(UnicodeText, primary_key=True),
-                "value": mapped_column(value_column_type, nullable=False),
-                "expires_at": mapped_column(
-                    DateTime(timezone=True), nullable=True, index=True
-                ),
-                "created_at": mapped_column(
-                    DateTime(timezone=True),
-                    default=lambda: datetime.now(timezone.utc),
-                    nullable=False,
-                ),
-                # Define table args like indexes
-                # "__table_args__": (
-                #     Index(f"ix_{table_name}_expires_at", "expires_at"),
-                #     {"extend_existing": True},
-                # ),
-                # Add a __repr__ for clarity
-                "__repr__": lambda self: f"<{model_name}(key='{self.key}', expires_at={self.expires_at})>",
-            },
-        )
+        model_name = f"{table_name.capitalize()}Entry"
+        attrs = {
+            "__tablename__": table_name,
+            "id": mapped_column(UnicodeText, primary_key=True),
+            "expires_at": mapped_column(
+                DateTime(timezone=True), nullable=True, index=True
+            ),
+            "created_at": mapped_column(
+                DateTime(timezone=True),
+                default=lambda: datetime.now(timezone.utc),
+                nullable=False,
+            ),
+            "__repr__": lambda self: f"<{model_name}(key='{self.id}', created_at={self.created_at}, expires_at={self.expires_at})>",
+        }
+        attrs.update(column_mapping or {})
+        DynamicCacheEntry = type(model_name, (Base,), attrs)
 
         cls._orm_models[model_key] = DynamicCacheEntry
         return DynamicCacheEntry
@@ -220,7 +178,7 @@ class Cache:
 
     def _format_file_content_from_cache(self, content: str):
         parsed = parse(
-            "Expires at: {expires_at}\nCreated at: {created_at}\nValue:\n{value}",
+            "Created at: {created_at}Expires at: {expires_at}\nCreated at: {created_at}\nValue:\n{value}",
             content,
         )
         return parsed.named
@@ -255,27 +213,19 @@ class Cache:
         """Checks if a key exists and has not expired."""
         logger.debug(f"Checking cache table '{self.table_name}' for key: {key}")
         try:
-            # Check local cache first
-            if settings.USE_LOCAL_CACHE:
-                local_cache_path = self.cache_dir / key
-                if local_cache_path.exists():
-                    result = self._read_from_file(local_cache_path)
-                    if result is not None:
-                        expires_at = datetime.fromisoformat(result["expires_at"])
-                        return expires_at > datetime.now(timezone.utc)
+            # # Check local cache first
+            # if settings.USE_LOCAL_CACHE:
+            #     local_cache_path = self.cache_dir / key
+            #     if local_cache_path.exists():
+            #         result = self._read_from_file(local_cache_path)
+            #         if result is not None:
+            #             expires_at = datetime.fromisoformat(result["expires_at"])
+            #             return expires_at > datetime.now(timezone.utc)
 
             # Fallback to remote cache if local cache fails
             with self._SessionLocal() as session:
-                query = select(self._cache_model.expires_at).where(
-                    self._cache_model.key == key
-                )
-                result = session.execute(query).first()
-                if result is None:
-                    return False
-                expires_at = result[0]
-                if expires_at is None:
-                    return True
-                return expires_at > datetime.now(timezone.utc)
+                entry = session.get(self._cache_model, key)
+                return self._is_expired(entry)
         except SQLAlchemyError as e:
             logger.error(
                 f"DB error checking key '{key}' in '{self.table_name}': {e}",
@@ -294,15 +244,15 @@ class Cache:
         logger.debug(f"Getting cache from table '{self.table_name}' for key: {key}")
         try:
             # Check local cache first
-            if settings.USE_LOCAL_CACHE:
-                local_cache_path = self.cache_dir / key
-                if local_cache_path.exists():
-                    result = self._read_from_file(local_cache_path)
-                    if result is not None and not self._is_expired(result):
-                        if self.value_type == CacheValueType.Pickle:
-                            return pickle.loads(result["value"])
-                        else:
-                            return result["value"]
+            # if settings.USE_LOCAL_CACHE:
+            #     local_cache_path = self.cache_dir / key
+            #     if local_cache_path.exists():
+            #         result = self._read_from_file(local_cache_path)
+            #         if result is not None and not self._is_expired(result):
+            #             if self.value_type == CacheValueType.Pickle:
+            #                 return pickle.loads(result["value"])
+            #             else:
+            #                 return result["value"]
 
             with self._SessionLocal() as session:
                 entry = session.get(self._cache_model, key)
@@ -320,21 +270,9 @@ class Cache:
                             logger.warning(f"Failed deleting expired key '{key}'.")
                     return None
 
-                # Deserialize based on the value_type of this cache instance
                 try:
-                    if self.value_type == CacheValueType.Pickle:
-                        value = pickle.loads(entry.value)
-                    else:
-                        value = entry.value
-
                     logger.debug(f"Cache hit for key '{key}' in '{self.table_name}'.")
-                    return value
-                except (pickle.UnpicklingError, json.JSONDecodeError) as deser_e:
-                    logger.error(
-                        f"Failed to deserialize cache value for key '{key}' (type: {self.value_type}): {deser_e}. Entry might be corrupted.",
-                        exc_info=True,
-                    )
-                    return None
+                    return Cache.as_dict(entry)
                 except Exception as e:
                     logger.error(
                         f"Unexpected error deserializing cache value for key '{key}': {e}",
@@ -355,54 +293,56 @@ class Cache:
             )
             return None
 
-    def write(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+    def write(self, key: str, ttl: Optional[int] = None, **kwargs) -> bool:
         """Serializes and writes an item to the cache."""
         logger.debug(
             f"Writing cache to table '{self.table_name}' for key: {key}, ttl: {ttl}"
         )
 
-        # Serialize based on the value_type of this cache instance
-        serialized_value: Any = value
-        try:
-            if self.value_type == CacheValueType.Pickle:
-                serialized_value = pickle.dumps(value)
-        except (pickle.PicklingError, TypeError, json.JSONDecodeError) as ser_e:
-            logger.error(
-                f"Failed to serialize value for key '{key}' (type: {self.value_type}): {ser_e}. Value not cached.",
-                exc_info=True,
-            )
-            return False
-        except Exception as e:
-            logger.error(
-                f"Unexpected error serializing value for key '{key}': {e}",
-                exc_info=True,
-            )
-            return False
+        # # Serialize based on the value_type of this cache instance
+        # serialized_value: Any = value
+        # try:
+        #     if self.value_type == CacheValueType.Pickle:
+        #         serialized_value = pickle.dumps(value)
+        # except (pickle.PicklingError, TypeError, json.JSONDecodeError) as ser_e:
+        #     logger.error(
+        #         f"Failed to serialize value for key '{key}' (type: {self.value_type}): {ser_e}. Value not cached.",
+        #         exc_info=True,
+        #     )
+        #     return False
+        # except Exception as e:
+        #     logger.error(
+        #         f"Unexpected error serializing value for key '{key}': {e}",
+        #         exc_info=True,
+        #     )
+        #     return False
 
         expires_at = self._get_expiration_ts(ttl)
 
         try:
-            # Write to local cache if applicable
-            if settings.USE_LOCAL_CACHE:
-                local_cache_path = self.cache_dir / key
-                if local_cache_path.exists():
-                    self._write_to_file(
-                        local_cache_path,
-                        expires_at,
-                        datetime.now(timezone.utc),
-                        serialized_value,
-                    )
-                    result = self._read_from_file(local_cache_path)
-                    if result is not None and not self._is_expired(result):
-                        if self.value_type == CacheValueType.Pickle:
-                            return pickle.loads(result["value"])
-                        else:
-                            return result["value"]
+            # # Write to local cache if applicable
+            # if settings.USE_LOCAL_CACHE:
+            #     local_cache_path = self.cache_dir / key
+            #     if local_cache_path.exists():
+            #         self._write_to_file(
+            #             local_cache_path,
+            #             expires_at,
+            #             datetime.now(timezone.utc),
+            #             serialized_value,
+            #         )
+            #         result = self._read_from_file(local_cache_path)
+            #         if result is not None and not self._is_expired(result):
+            #             if self.value_type == CacheValueType.Pickle:
+            #                 return pickle.loads(result["value"])
+            #             else:
+            #                 return result["value"]
 
             with self._SessionLocal() as session:
                 # Create ORM instance using the dynamic model
                 entry = self._cache_model(
-                    key=key, value=serialized_value, expires_at=expires_at
+                    id=key,
+                    expires_at=expires_at,
+                    **kwargs,
                 )
                 session.merge(entry)
                 session.commit()
@@ -429,9 +369,9 @@ class Cache:
         logger.debug(f"Deleting cache from table '{self.table_name}' for key: {key}")
         try:
             # Delete from local cache if applicable
-            if settings.USE_LOCAL_CACHE:
-                local_cache_path = self.cache_dir / key
-                os.remove(local_cache_path) if local_cache_path.exists() else None
+            # if settings.USE_LOCAL_CACHE:
+            #     local_cache_path = self.cache_dir / key
+            #     os.remove(local_cache_path) if local_cache_path.exists() else None
 
             with self._SessionLocal() as session:
                 entry = session.get(self._cache_model, key)
@@ -465,9 +405,9 @@ class Cache:
         """Removes all entries from this specific cache table."""
         logger.warning(f"Clearing ALL entries from cache table '{self.table_name}'...")
         try:
-            if settings.USE_LOCAL_CACHE:
-                local_cache_path = self.cache_dir
-                os.rmdir(local_cache_path) if local_cache_path.exists() else None
+            # if settings.USE_LOCAL_CACHE:
+            #     local_cache_path = self.cache_dir
+            #     os.rmdir(local_cache_path) if local_cache_path.exists() else None
 
             with self._SessionLocal() as session:
                 num_deleted = session.query(self._cache_model).delete()

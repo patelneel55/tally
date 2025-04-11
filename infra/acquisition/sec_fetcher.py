@@ -21,12 +21,32 @@ Financial importance:
 
 import json
 import logging
+import pickle
 from datetime import date as Date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    LargeBinary,
+    MetaData,
+    PickleType,
+    String,
+    Table,
+    Text,
+    UnicodeText,
+    create_engine,
+    delete,
+    func,
+    insert,
+    select,
+    update,
+)
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
 
 import infra.acquisition.models as models
 from infra.acquisition.models import DataFormat, FilingType, SECFiling
@@ -94,6 +114,8 @@ class EDGARFetcher(IDataFetcher):
     limiting, and data formatting.
     """
 
+    _CACHE_COLUMNS = {"value": mapped_column(PickleType, nullable=False)}
+
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize the SEC filing fetcher.
@@ -111,7 +133,7 @@ class EDGARFetcher(IDataFetcher):
         self._cache = Cache(
             sqlalchemy_engine,
             table_name="sec_filings",
-            value_type=CacheValueType.Pickle,
+            column_mapping=self._CACHE_COLUMNS,
         )
 
     async def fetch(self, identifiers: List[str], **kwargs) -> List[SECFiling]:
@@ -142,9 +164,9 @@ class EDGARFetcher(IDataFetcher):
             raise ValidationError(str(e), field=e.args[1] if len(e.args) > 1 else None)
 
         request_hash = self._cache.generate_id(request.model_dump())
-        filings = self._cache.get(request_hash)
+        cache_entry = self._cache.get(request_hash)
+        filings = pickle.loads(cache_entry["value"]) if cache_entry else None
         if filings:
-            logger.debug("Cache hit. Returning cached filings.")
             return filings
 
         # Get search query for SEC API
@@ -160,8 +182,8 @@ class EDGARFetcher(IDataFetcher):
 
         self._cache.write(
             request_hash,
-            filings_data,
             ttl=settings.SEC_API_CACHE_EXPIRATION,
+            value=pickle.dumps(filings_data),
         )
         return filings_data
 

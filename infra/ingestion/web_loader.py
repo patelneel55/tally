@@ -2,18 +2,45 @@ import hashlib
 import json
 import logging
 import os
+import pickle
 import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from crawlee import ConcurrencySettings
-from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
+from crawlee.crawlers import (
+    PlaywrightCrawler,
+    PlaywrightCrawlingContext,
+    PlaywrightPreNavCrawlingContext,
+)
 from langchain_core.documents import Document
 from pydantic import BaseModel
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    LargeBinary,
+    MetaData,
+    PickleType,
+    String,
+    Table,
+    Text,
+    UnicodeText,
+    create_engine,
+    delete,
+    func,
+    insert,
+    select,
+    update,
+)
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
 
 from infra.acquisition.models import AcquisitionOutput
 from infra.core.interfaces import IDocumentLoader
+from infra.databases.cache import Cache
+from infra.databases.engine import sqlalchemy_engine
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -41,6 +68,12 @@ class WebLoader(IDocumentLoader):
 
     """
 
+    _CACHE_COLUMNS = {
+        "headers": mapped_column(PickleType, nullable=False),
+        "status_code": mapped_column(Integer, nullable=False),
+        "body": mapped_column(UnicodeText, nullable=True),
+    }
+
     def __init__(
         self,
         crawl_strategy: CrawlStrategy = CrawlStrategy.SAME_DOMAIN,
@@ -55,8 +88,11 @@ class WebLoader(IDocumentLoader):
             max_requests_per_crawl=max_requests_per_crawl,
             max_crawl_depth=max_crawl_depth,
         )
-        self.cache_dir = Path("cache/web_loader")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache = Cache(
+            engine=sqlalchemy_engine,
+            table_name="web_loader",
+            column_mapping=self._CACHE_COLUMNS,
+        )
 
     async def load(self, sources: List[AcquisitionOutput]) -> List[Document]:
         """
@@ -160,63 +196,69 @@ class WebLoader(IDocumentLoader):
             logger.error(f"Error loading cache file {cache_path}: {str(e)}")
             return None
 
+    def _cache_hook(self):
+        async def _prenav_cache_hook(context: PlaywrightPreNavCrawlingContext) -> None:
+            url = context.request.url
+            cache_entry = self._cache.get(url)
+            if cache_entry:
+                context.request.user_data["cached"] = True
+
+                # Create a route handler function that will intercept the request
+                async def route_handler(route, request):
+                    logger.debug(f"Intercepting {url} and returning cached response")
+                    await route.fulfill(
+                        status=cache_entry["status_code"],
+                        headers=pickle.loads(cache_entry["headers"]),
+                        body=cache_entry["body"],
+                    )
+
+                # Register a route for the exact URL to intercept the navigation
+                await context.page.route(url, route_handler)
+
+        return _prenav_cache_hook
+
     async def _crawl_url(
         self,
         urls: List[str],
         config: CrawlConfig,
-        handlePage: Callable[[str, str], None],
+        handle_page: Callable[[str, str], None],
     ) -> None:
         """
         Crawls the URL and calls the handlePage function with the URL and content.
         """
-        # cache_key = self._generate_cache_key(urls, config)
-
-        # # Try to load from cache first
-        # cached_data = self._load_from_cache(cache_key)
-        # if cached_data:
-        #     logger.info(f"Using cached data for URLs: {urls}")
-        #     for url, content in cached_data.items():
-        #         handlePage(url, content)
-        #     return
-
-        # # If not in cache, perform the crawl
-        # logger.info(f"Cache miss for URLs: {urls}, performing crawl")
-        # crawled_data = {}
-
         crawler = PlaywrightCrawler(
             max_requests_per_crawl=config.max_requests_per_crawl,
             max_crawl_depth=config.max_crawl_depth,
             concurrency_settings=ConcurrencySettings(
-                # min_concurrency=1,
-                # max_concurrency=10,
-                # Set the maximum number of tasks per minute
-                # to avoid overloading the server
-                #  100 tasks per minute
-                #  100 tasks per minute
-                #  100 tasks per minute
                 max_tasks_per_minute=600,
             ),
         )
+        # Add prenavigation hook to check for cache, if exists
+        # it should return the cached value instead
+        # crawler.pre_navigation_hook(self._cache_hook())
 
         @crawler.router.default_handler
         async def request_handler(context: PlaywrightCrawlingContext) -> None:
             logging.debug(f"Processing {context.request.url}...")
+            url = context.request.url
             await context.page.wait_for_load_state("networkidle")
             await context.enqueue_links(
                 base_url=context.request.loaded_url,
                 strategy=config.crawl_strategy,
             )
-            url = context.request.loaded_url or ""
             content = await context.page.content()
 
             # Call the handler
-            handlePage(url, content)
+            handle_page(url, content)
 
-            # Save to our crawled data dictionary for caching
-            # crawled_data[url] = content
+            if not context.request.user_data.get("cached", False):
+                self._cache.write(
+                    url,
+                    ttl=60 * 60 * 24,
+                    status_code=context.response.status,
+                    headers=pickle.dumps(await context.response.all_headers()),
+                    body=content,
+                )
 
         await crawler.run(urls)
         logging.debug(f"Finished crawling {urls}.")
-
-        # # Save the crawled data to cache
-        # self._save_to_cache(cache_key, crawled_data)
