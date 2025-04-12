@@ -81,12 +81,37 @@ class SECFiling(BaseModel, AcquisitionOutput):
         """Return a list of URIs for the filing."""
         uris = []
         if self.documentURL:
-            uris.append(self.documentURL)
+            uri = self._convert_to_sec_gov_url(self.documentURL)
+            uris.append(uri)
         return uris
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return metadata for the filing."""
         return self.model_dump(exclude={"pdf_path", "html_path", "textURL"})
+
+    def _convert_to_sec_gov_url(self, url: str) -> Optional[str]:
+        """
+        Convert an API URL to a SEC.gov URL format.
+
+        The PDF Generator API requires URLs in the SEC.gov format.
+
+        Args:
+            url: The URL to convert
+
+        Returns:
+            SEC.gov formatted URL if conversion is successful, None otherwise
+        """
+        # If it's already a SEC.gov URL, return it as is
+        if url.startswith("https://www.sec.gov/"):
+            # Remove inline XBRL parameters if present
+            return url.replace("/ix?doc=", "")
+
+        # If it's a URL from the SEC API
+        if "sec-api.io" in url:
+            # Extract the path after /Archives/
+            parts = url.split("/Archives/")
+            if len(parts) > 1:
+                return f"https://www.sec.gov/Archives/{parts[1]}"
 
 
 sec_api_query_response_schema = Schema(

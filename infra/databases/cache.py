@@ -115,7 +115,10 @@ class Cache:
         try:
             serialized_data = json.dumps(data, sort_keys=True)
         except (TypeError, ValueError) as e:
-            serialized_data = data
+            if isinstance(data, str):
+                serialized_data = data.strip()
+            else:
+                serialized_data = data
 
         hash_obj = hashlib.sha256()
         hash_obj.update(serialized_data.encode("utf-8"))

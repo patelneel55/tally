@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
         try:
             fetcher = EDGARFetcher()
-            loader = WebLoader(crawl_strategy="all", max_crawl_depth=2)
+            loader = WebLoader(crawl_strategy="all", max_crawl_depth=1)
             parser = SECParser()
             llm_provider = OpenAIProvider()
             splitter = SECSplitter(llm_provider=llm_provider)
@@ -77,14 +77,14 @@ if __name__ == "__main__":
 
             docs = await loader.load(filings)
             print(f"Number of documents: {len(docs)}")
-            save_docs(docs, "load", ticker, doc_type, "html")
+            # save_docs(docs, "load", ticker, doc_type, "html")
 
-            # documents = parser.parse(docs)
-            # print(f"Number of documents: {len(documents)}")
+            documents = parser.parse(docs)
+            print(f"Number of documents: {len(documents)}")
             # save_docs(documents, "parse", ticker, doc_type, "md")
 
-            # split_docs = await splitter.split_documents(documents)
-            # print(f"Number of documents: {len(split_docs)}")
+            split_docs = await splitter.split_documents(documents)
+            print(f"Number of documents: {len(split_docs)}")
             # save_docs(split_docs, "split", ticker, doc_type, "md")
 
             # embedding_model = embeddings.get_embedding_model()

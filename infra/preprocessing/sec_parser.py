@@ -1,13 +1,18 @@
+import asyncio
 import logging
 import re
+import time
 import warnings
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import sec_parser as sp
 from langchain_core.documents import Document
-from langchain_core.language_models import BaseLanguageModel
+from sqlalchemy import UnicodeText
+from sqlalchemy.orm import mapped_column
 
 from infra.core.interfaces import ILLMProvider, IParser, ISplitter
+from infra.databases.cache import Cache
+from infra.databases.engine import sqlalchemy_engine
 from infra.preprocessing.models import SemanticDocument
 from infra.tools.table_summarizer import TableSummarizerInput, TableSummarizerTool
 
@@ -46,11 +51,22 @@ class SECSplitter(ISplitter):
     Splitter for SEC filings using the sec-parser library.
     """
 
+    _TABLE_SUMMARY_TABLE_NAME = "markdown_tables_summary"
+
     def __init__(self, llm_provider: ILLMProvider = None):
         """Initialize the SEC splitter."""
         self.llm_provider = llm_provider
         self.table_summarizer = (
             TableSummarizerTool(llm_provider) if llm_provider else None
+        )
+
+        self._md_table_cache = Cache(
+            engine=sqlalchemy_engine,
+            table_name=self._TABLE_SUMMARY_TABLE_NAME,
+            column_mapping={
+                "markdown": mapped_column(UnicodeText, nullable=False),
+                "summary": mapped_column(UnicodeText, nullable=True),
+            },
         )
 
     async def split_documents(self, documents: List[Document]) -> List[Document]:
@@ -89,8 +105,16 @@ class SECSplitter(ISplitter):
         Returns:
             List of Document objects with structured SEC filing data
         """
-        # tree.nodes
-        # Implement the conversion logic here
+        table_tasks = await self._collect_table_tasks(tree)
+        if table_tasks:
+            logger.debug(f"Processing {len(table_tasks)} tables in parallel")
+            start_time = time.time()
+            await asyncio.gather(*table_tasks)
+            end_time = time.time()
+            logger.debug(
+                f"Processed {len(table_tasks)} tables in {end_time - start_time:.2f} seconds"
+            )
+
         documents = []
         for root_node in tree:
             # Process each root node and its children
@@ -98,15 +122,23 @@ class SECSplitter(ISplitter):
             documents.extend(chunks)
         return documents
 
-    async def _table_formatting(self, markdown_lines: str) -> str:
+    async def _collect_table_tasks(self, tree: sp.SemanticTree):
+        """
+        Collect all tables in the tree to parse as asyncio tasks.
+        """
+        table_tasks = []
+        for node in tree.nodes:
+            if isinstance(node.semantic_element, sp.TableElement):
+                table_tasks.append(
+                    asyncio.create_task(
+                        self._process_table(node.semantic_element.table_to_markdown())
+                    )
+                )
+        return table_tasks
+
+    def _cleanup_table_format(self, markdown_lines: str) -> str:
         """
         Clean up table formatting in the text.
-
-        Args:
-            text: Text containing table formatting
-
-        Returns:
-            Cleaned text
         """
         # Add header separators for tables if doesn't exist
         markdown_lines = markdown_lines.split("\n")
@@ -114,19 +146,35 @@ class SECSplitter(ISplitter):
             num_cols = markdown_lines[0].count("|") - 1  # exclude outer bars
             separator_line = "|" + "|".join([" --- "] * num_cols) + "|"
             markdown_lines.insert(1, separator_line)
-        markdown_table = "\n".join(markdown_lines)
+        return "\n".join(markdown_lines).strip()
+
+    async def _process_table(self, markdown_lines: str) -> None:
+        """
+        Clean up table formatting in the text.
+
+        Args:
+            text: Text containing table formatting
+        """
+        markdown_table = self._cleanup_table_format(markdown_lines)
+        table_hash = self._md_table_cache.generate_id(markdown_table)
+
+        cache_entry = self._md_table_cache.get(table_hash)
+        if cache_entry and cache_entry["summary"]:
+            return
 
         if self.table_summarizer is None:
             logger.warning(
                 f"LLM Provider not specified, proceeding without LLM. Using raw table."
             )
-            return markdown_table
+            self._md_table_cache.write(table_hash, markdown=markdown_table)
+            return
 
-        # TODO(neelp): Append table metadata which will be responsible for retrieving the actual table
-        # content from the document
         summarizer_input = TableSummarizerInput(table=markdown_table)
         table_summary = await self.table_summarizer.run(**summarizer_input.model_dump())
-        return table_summary
+        self._md_table_cache.write(
+            table_hash, markdown=markdown_table, summary=table_summary
+        )
+        return
 
     async def _flatten_tree(
         self, node: sp.TreeNode, metadata, path=None, level=1
@@ -152,8 +200,22 @@ class SECSplitter(ISplitter):
                     }
                 )
                 if isinstance(node.semantic_element, sp.TableElement):
-                    content = await self._table_formatting(
+                    markdown_table = self._cleanup_table_format(
                         node.semantic_element.table_to_markdown()
+                    )
+
+                    # Retrieve either the table or the summary from the cache
+                    table_hash = self._md_table_cache.generate_id(markdown_table)
+                    cache_entry = self._md_table_cache.get(table_hash)
+                    if cache_entry and cache_entry["summary"]:
+                        content = cache_entry["summary"]
+                    else:
+                        content = markdown_table
+                    doc_metadata.update(
+                        {
+                            "db_table_key": table_hash,
+                            "db_table_name": self._TABLE_SUMMARY_TABLE_NAME,
+                        }
                     )
                 else:
                     content = node.semantic_element.text.strip()

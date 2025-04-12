@@ -44,7 +44,7 @@ class OpenAIProvider(ILLMProvider):
                 "temperature": self.temperature,
                 **self.extra_kwargs,
             }
-            model = ChatOpenAI(**model_kwargs)
+            model = ChatOpenAI(api_key=self.api_key, **model_kwargs)
         except Exception as e:
             logger.error(f"Error initializing OpenAI model: {e}")
             raise e

@@ -88,7 +88,7 @@ the summary will contain the necessary references to identify the table as the d
         Returns:
             str: The summarized text of the table.
         """
-        logger.info(f"📌 TOOL EXECUTION: {self.name()}")
+        logger.info(f"📌 TOOL EXECUTION: {self.name}")
         try:
             llm = self._llm()
 

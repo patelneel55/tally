@@ -23,37 +23,19 @@ import json
 import logging
 import pickle
 from datetime import date as Date
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Index,
-    LargeBinary,
-    MetaData,
-    PickleType,
-    String,
-    Table,
-    Text,
-    UnicodeText,
-    create_engine,
-    delete,
-    func,
-    insert,
-    select,
-    update,
-)
-from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
+from sqlalchemy import PickleType
+from sqlalchemy.orm import mapped_column
 
 import infra.acquisition.models as models
 from infra.acquisition.models import DataFormat, FilingType, SECFiling
 from infra.core.config import settings
 from infra.core.exceptions import DataFetchError, ValidationError
 from infra.core.interfaces import IDataFetcher
-from infra.databases.cache import Cache, CacheValueType
+from infra.databases.cache import Cache
 from infra.databases.engine import sqlalchemy_engine
 
 # Set up logging
@@ -171,8 +153,6 @@ class EDGARFetcher(IDataFetcher):
 
         # Get search query for SEC API
         search_query = self._build_search_query(request)
-
-        # Log detailed information
         logger.info(
             f"Querying SEC API for {request.identifier} filings with payload: {json.dumps(search_query)}"
         )
@@ -220,7 +200,7 @@ class EDGARFetcher(IDataFetcher):
 
         # Add filing type if specified
         if request.filing_type:
-            lucene_query["AND"].append(f"formType:{request.filing_type}")
+            lucene_query["AND"].append(f'formType:"{request.filing_type}"')
 
         # Add date range if specified
         if request.start_date and request.end_date:

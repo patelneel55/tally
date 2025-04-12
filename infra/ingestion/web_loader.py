@@ -16,26 +16,8 @@ from crawlee.crawlers import (
 )
 from langchain_core.documents import Document
 from pydantic import BaseModel
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Index,
-    Integer,
-    LargeBinary,
-    MetaData,
-    PickleType,
-    String,
-    Table,
-    Text,
-    UnicodeText,
-    create_engine,
-    delete,
-    func,
-    insert,
-    select,
-    update,
-)
-from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
+from sqlalchemy import Integer, PickleType, UnicodeText
+from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.models import AcquisitionOutput
 from infra.core.interfaces import IDocumentLoader
@@ -121,81 +103,6 @@ class WebLoader(IDocumentLoader):
 
         return documents
 
-    def _generate_cache_key(self, url: str, config: CrawlConfig) -> str:
-        """
-        Generate a unique cache key based on URLs and crawl configuration.
-
-        Args:
-            urls: List of URLs to crawl
-            config: Crawl configuration
-
-        Returns:
-            A unique cache key
-        """
-        # Create a string representation of the URLs and config
-        config_str = f"{config.crawl_strategy}_{config.max_requests_per_crawl}_{config.max_crawl_depth}"
-
-        # Create a hash of the combined string
-        key_str = f"{url}_{config_str}"
-        return hashlib.md5(key_str.encode("utf-8")).hexdigest()
-
-    def _get_cache_path(self, cache_key: str) -> str:
-        """
-        Get the path to the cache file for a given cache key.
-
-        Args:
-            cache_key: Cache key
-
-        Returns:
-            Path to cache file
-        """
-        return os.path.join(self.cache_dir, f"{cache_key}.json")
-
-    def _save_to_cache(self, cache_key: str, crawled_data: Dict[str, str]) -> None:
-        """
-        Save crawled data to cache.
-
-        Args:
-            cache_key: Cache key
-            crawled_data: Dictionary mapping URLs to page content
-        """
-        if not self.use_cache:
-            return
-
-        cache_path = self._get_cache_path(cache_key)
-        try:
-            with open(cache_path, "w", encoding="utf-8") as f:
-                json.dump(crawled_data, f)
-            logger.info(f"Saved crawled data to cache: {cache_path}")
-        except Exception as e:
-            logger.error(f"Error saving to cache file {cache_path}: {str(e)}")
-
-    def _load_from_cache(self, cache_key: str) -> Optional[Dict[str, str]]:
-        """
-        Load crawled data from cache.
-
-        Args:
-            cache_key: Cache key
-
-        Returns:
-            Dictionary mapping URLs to page content, or None if cache is invalid
-        """
-        if not self.use_cache:
-            return None
-
-        cache_path = self._get_cache_path(cache_key)
-        if not self._is_cache_valid(cache_path):
-            return None
-
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            logger.info(f"Loaded crawled data from cache: {cache_path}")
-            return data
-        except Exception as e:
-            logger.error(f"Error loading cache file {cache_path}: {str(e)}")
-            return None
-
     def _cache_hook(self):
         async def _prenav_cache_hook(context: PlaywrightPreNavCrawlingContext) -> None:
             url = context.request.url
@@ -221,7 +128,7 @@ class WebLoader(IDocumentLoader):
         self,
         urls: List[str],
         config: CrawlConfig,
-        handle_page: Callable[[str, str], None],
+        handlePage: Callable[[str, str], None],
     ) -> None:
         """
         Crawls the URL and calls the handlePage function with the URL and content.
@@ -235,21 +142,21 @@ class WebLoader(IDocumentLoader):
         )
         # Add prenavigation hook to check for cache, if exists
         # it should return the cached value instead
-        # crawler.pre_navigation_hook(self._cache_hook())
+        crawler.pre_navigation_hook(self._cache_hook())
 
         @crawler.router.default_handler
         async def request_handler(context: PlaywrightCrawlingContext) -> None:
             logging.debug(f"Processing {context.request.url}...")
-            url = context.request.url
             await context.page.wait_for_load_state("networkidle")
             await context.enqueue_links(
                 base_url=context.request.loaded_url,
                 strategy=config.crawl_strategy,
             )
+            url = context.request.loaded_url
             content = await context.page.content()
 
             # Call the handler
-            handle_page(url, content)
+            handlePage(url, content)
 
             if not context.request.user_data.get("cached", False):
                 self._cache.write(

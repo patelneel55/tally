@@ -131,34 +131,6 @@ class EDGARPDFLoader(IDocumentLoader):
 
         return ticker_dir / filename
 
-    def _convert_to_sec_gov_url(self, url: str) -> Optional[str]:
-        """
-        Convert an API URL to a SEC.gov URL format.
-
-        The PDF Generator API requires URLs in the SEC.gov format.
-
-        Args:
-            url: The URL to convert
-
-        Returns:
-            SEC.gov formatted URL if conversion is successful, None otherwise
-        """
-        # If it's already a SEC.gov URL, return it as is
-        if url.startswith("https://www.sec.gov/"):
-            # Remove inline XBRL parameters if present
-            return url.replace("/ix?doc=", "")
-
-        # If it's a URL from the SEC API
-        if "sec-api.io" in url:
-            # Extract the path after /Archives/
-            parts = url.split("/Archives/")
-            if len(parts) > 1:
-                return f"https://www.sec.gov/Archives/{parts[1]}"
-
-        # If we can't convert it, return None
-        logger.warning(f"Could not convert URL to SEC.gov format: {url}")
-        return None
-
     async def _make_http_request(
         self,
         url: str,
