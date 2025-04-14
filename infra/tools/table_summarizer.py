@@ -18,7 +18,7 @@ class TableSummarizerInput(BaseModel):
     This schema defines the parameters required to summarize a table.
     """
 
-    table: str = Field(description="The table to be summarized in Markdown format.")
+    table: str = Field(description="The table to be summarized provided in Markdown format.")
 
 
 class TableSummarizerTool(BaseTool):

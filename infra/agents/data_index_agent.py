@@ -1,0 +1,36 @@
+import logging
+
+from langchain.prompts import BasePromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+
+from infra.agents.langgraph import LangGraphReActAgent
+from infra.core.interfaces import ILLMProvider, IVectorStore
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+class DataIndexAgent(LangGraphReActAgent):
+    AGENT_NAME = "DataIndexer"
+    SYSTEM_MESSAGE = """
+You are an AI assistant responsible for managing the status of indexed data sources.
+Your job is to check if specific data sources (like company filings or transcripts) are present
+and up-to-date in the knowledge base using the available tools.
+If data is missing or stale, you can trigger the indexing process for that source using the appropriate tool.
+Provide clear status updates based on the tool outputs.
+"""
+
+    def __init__(
+        self,
+        llm_provider: ILLMProvider,
+        vector_store: IVectorStore,
+    ):
+        index_tools = [
+            VectorSearchTool(vector_store=vector_store),
+            SQLAlchemySearchTool(engine=engine),
+            IndexingPipelineTool(),
+        ]
+
+        super().__init__(
+            llm_provider=llm_provider,
+            tools=index_tools,
+            base_prompt=SystemMessagePromptTemplate.from_template(self.SYSTEM_MESSAGE)
+        )

@@ -47,7 +47,7 @@ class ITool(BaseTool, ABC):
     #     pass
 
     @abstractmethod
-    async def run(self, **kwargs) -> Any:
+    async def execute(self, **kwargs) -> Any:
         """
         Execute the tool with the provided arguments.
 
@@ -73,7 +73,7 @@ class ITool(BaseTool, ABC):
         """
         import asyncio
 
-        return asyncio.run(self.run(**kwargs))
+        return asyncio.run(self.execute(**kwargs))
 
     async def _arun(self, **kwargs) -> Any:
         """
@@ -81,4 +81,4 @@ class ITool(BaseTool, ABC):
 
         This is the preferred method for running the tool.
         """
-        return await self.run(**kwargs)
+        return await self.execute(**kwargs)

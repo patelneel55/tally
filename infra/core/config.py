@@ -29,9 +29,9 @@ class Settings(BaseSettings):
 
     # External API keys - credentials for accessing financial data services
     # These are intentionally loaded from environment variables for security
-    SEC_API_KEY: str = Field(..., alias="SEC_API_KEY")
+    # SEC_API_KEY: str = Field(..., alias="SEC_API_KEY")
     OPENAI_API_KEY: str = Field(..., alias="OPENAI_API_KEY")
-    POLYGON_API_KEY: str = Field(..., alias="POLYGON_API_KEY")
+    # POLYGON_API_KEY: str = Field(..., alias="POLYGON_API_KEY")
 
     LOCAL_CACHE_DIR: str = Field("cache", alias="CACHE_DIR")
     USE_LOCAL_CACHE: bool = Field(False, alias="USE_LOCAL_CACHE")
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     #
     # The databases will be used for caching and storing all relevant
     # data for the infrastructure
-    DB_ENGINE_URL: str = Field(..., alias="DB_ENGINE_URL")
+    # DB_ENGINE_URL: str = Field(..., alias="DB_ENGINE_URL")
 
     SEC_API_CACHE_EXPIRATION: int = Field(
         60 * 60 * 24, alias="SEC_API_CACHE_EXPIRATION"

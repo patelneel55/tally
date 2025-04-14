@@ -15,7 +15,7 @@ class IAgent(ABC):
     """
 
     @abstractmethod
-    def add_tool(self, tool: ITool) -> None:
+    def add_tools(self, tools: List[ITool]) -> None:
         """
         Add a tool to the agent's toolset.
 
@@ -35,17 +35,25 @@ class IAgent(ABC):
         pass
 
     @abstractmethod
-    async def run(self, task: str, **kwargs) -> Any:
+    def build_agent(self) -> Any:
         """
-        Run the agent on a specific task.
-
-        The agent will use its tools to accomplish the task.
-
-        Args:
-            task: The task to perform
-            **kwargs: Additional arguments for the agent
-
-        Returns:
-            The result of the agent's execution
+        Build the AI agent based on the provided tools
+        and prompts
         """
         pass
+
+    # @abstractmethod
+    # async def run(self, task: str, **kwargs) -> Any:
+    #     """
+    #     Run the agent on a specific task.
+
+    #     The agent will use its tools to accomplish the task.
+
+    #     Args:
+    #         task: The task to perform
+    #         **kwargs: Additional arguments for the agent
+
+    #     Returns:
+    #         The result of the agent's execution
+    #     """
+    #     pass
