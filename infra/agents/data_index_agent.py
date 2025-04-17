@@ -3,7 +3,11 @@ import logging
 from langchain.prompts import BasePromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
 from infra.agents.langgraph import LangGraphReActAgent
-from infra.core.interfaces import ILLMProvider, IVectorStore
+from infra.core.interfaces import ILLMProvider, IVectorStore, IEmbeddingProvider
+from infra.tools.pipelines import IndexingPipelineTool
+from infra.pipelines.indexing_pipeline import IndexingPipeline
+from infra.databases.engine import sqlalchemy_engine
+from infra.tools.vector_search import VectorSearchTool
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -22,11 +26,18 @@ Provide clear status updates based on the tool outputs.
         self,
         llm_provider: ILLMProvider,
         vector_store: IVectorStore,
+        embedding_provider: IEmbeddingProvider,
     ):
         index_tools = [
-            VectorSearchTool(vector_store=vector_store),
-            SQLAlchemySearchTool(engine=engine),
-            IndexingPipelineTool(),
+            VectorSearchTool(vector_store=vector_store, embeddings=embedding_provider),
+            # SQLAlchemySearchTool(engine=sqlalchemy_engine),
+            IndexingPipelineTool(
+                pipeline=IndexingPipeline(
+                    embedding_provider=embedding_provider,
+                    vector_store=vector_store,
+                    llm_provider=llm_provider,
+                )
+            ),
         ]
 
         super().__init__(

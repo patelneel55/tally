@@ -24,6 +24,7 @@ from infra.core.interfaces import (
     IParser,
     ISplitter,
     IVectorStore,
+    ILLMProvider,
 )
 from infra.ingestion.web_loader import WebLoader
 from infra.parsers.html_parser import HTMLParser
@@ -52,6 +53,7 @@ class IndexingPipeline:
         parser: Optional[IParser] = None,
         splitter: Optional[ISplitter] = None,
         embedding_provider: Optional[IEmbeddingProvider] = None,
+        llm_provider: Optional[ILLMProvider] = None,
         vector_store: Optional[IVectorStore] = None,
         cache_dir: str = "cache/saved_documents",
         should_save_intermediates: bool = False,
@@ -73,7 +75,8 @@ class IndexingPipeline:
         self.fetcher = fetcher or EDGARFetcher()
         self.loader = loader or WebLoader(crawl_strategy="all", max_crawl_depth=0)
         self.parser = parser or SECParser()
-        self.splitter = splitter or SECSplitter()
+        self.llm_provider = llm_provider
+        self.splitter = splitter or SECSplitter(llm_provider=self.llm_provider)
         self.embedding_provider = embedding_provider
         self.vector_store = vector_store
         self.cache_dir = cache_dir
@@ -124,7 +127,6 @@ class IndexingPipeline:
         data_format: DataFormat = DataFormat.HTML,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        force_reindex: bool = False,
     ):
         """
         Run the complete indexing pipeline.
@@ -138,7 +140,7 @@ class IndexingPipeline:
         Returns:
             List of document chunks that were indexed
         """
-        logger.info(f"Starting indexing pipeline for {identifier} {filing_type}")
+        logger.info(f"Starting indexing pipeline for {identifier} {filing_type.value}")
 
         # Convert string filing type to enum if needed
         if isinstance(filing_type, str):
@@ -147,7 +149,11 @@ class IndexingPipeline:
         try:
             # Step 1: Fetch filings
             filings = await self.fetcher.fetch(
-                identifier=identifier, filing_type=filing_type, data_format=data_format
+                identifiers=[identifier],
+                filing_type=filing_type,
+                data_format=data_format,
+                start_date=start_date,
+                end_date=end_date,
             )
             logger.info(
                 f"Found {len(filings)} {filing_type.value} filings for {identifier}"
@@ -187,6 +193,6 @@ class IndexingPipeline:
 
         except Exception as e:
             logger.error(
-                f"Error in indexing pipeline for {identifier} {filing_type}: {e}"
+                f"Error in indexing pipeline for {identifier} {filing_type.value}: {e}"
             )
             raise

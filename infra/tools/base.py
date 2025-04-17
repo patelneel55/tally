@@ -62,7 +62,7 @@ class PipelineTool(BaseTool):
         self._pipeline = pipeline
         self._arg_mapping = arg_mapping or {}
 
-    async def run(self, **kwargs) -> Any:
+    async def execute(self, **kwargs) -> Any:
         """
         Run the wrapped pipeline with the provided arguments.
 

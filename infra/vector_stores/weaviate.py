@@ -7,6 +7,7 @@ It implements the IVectorStore interface and provides additional methods for
 managing documents in the vector store.
 """
 
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
@@ -16,22 +17,28 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
+from langchain_community.retrievers import WeaviateHybridSearchRetriever
+from weaviate.classes.config import Property, DataType
 from weaviate.exceptions import WeaviateBaseError
+import weaviate
+from weaviate import Client
 
 from infra.core.interfaces import IVectorStore
+from infra.core.config import settings
 
 
-@dataclass
-class WeaviateConfig:
-    """Configuration for Weaviate connection."""
+# @dataclass
+# class WeaviateConfig:
+#     """Configuration for Weaviate connection."""
 
-    url: str
-    api_key: Optional[str] = None
-    additional_headers: Optional[Dict[str, str]] = None
-    class_name: str = "Document"
-    batch_size: int = 100
-    text_field: str = "text"
-    metadata_field: str = "metadata"
+#     url: str
+#     api_key: Optional[str] = None
+#     additional_headers: Optional[Dict[str, str]] = None
+#     class_name: str = "Document"
+#     batch_size: int = 100
+#     text_field: str = "text"
+#     metadata_field: str = "metadata"
+logger = logging.getLogger(__name__)
 
 
 class WeaviateVectorStore(IVectorStore):
@@ -41,15 +48,94 @@ class WeaviateVectorStore(IVectorStore):
     interacting with a Weaviate vector database.
     """
 
+    def __init__(
+        self,
+        index_name: str,
+        client: Any = None,
+    ):
+        self._client = client
+        self.collection_name = index_name
+        self._vectorstore = None # Lazy loading
+
+    def _get_client(self) -> Client:
+        if self._client is None:
+            logger.info(
+                f"Initializing Weaviate client..."
+            )
+            weaviate.connect_to_custom(
+                http_host=settings.WEAVIATE_HTTP_URL,
+                grpc_host=settings.WEAVIATE_GRPC_URL,
+                grpc_port=50051,
+                http_port=80,
+                grpc_secure=False,
+                http_secure=False,
+            )
+        return self._client
+
+    def _initialize(self, embeddings: Embeddings, metadata: Dict = None):
+        if self._vectorstore is None:
+            logger.info(
+                f"Initializing Weaviate for collection: {self.collection_name}..."
+            )
+            self._vectorstore = WeaviateHybridSearchRetriever(
+                client=self._get_client(),
+                index_name=self.collection_name,
+                embedding=embeddings
+            )
+
+        if not metadata:
+            return
+
+        schema = self._get_client().schema.get()
+        existing_classes = {c["class"]: c for c in schema["classes"]}
+        class_exists = self.collection_name in existing_classes
+        properties = [
+            Property(name=k, dataType=self._get_weviate_type(v))
+            for k, v in metadata.items()
+        ]
+        properties.append(Property(name="page_content", dataType=DataType.TEXT))
+
+        if not class_exists:
+            self._get_client().schema.create_class({
+                "class": self.collection_name,
+                "vectorizer": "none", # Using external embeddings
+                "properties": properties,
+            })
+            return
+
+        existing_properties = {p["name"] for p in existing_classes[self.collection_name]["properties"]}
+        for k, v in metadata:
+
+        schema = self._get_client().schema.get()
+        if not any(c["class"] == self.collection_name for c in schema["classes"]):
+
+
+
+    def _dict_to_weaviate_properties(dict: Dict) -> List[Dict]:
+        return []
+
+    def get_metadata_properties():
+
+    def get_vectorstore(self, embeddings: Embeddings):
+        weaviate.connect_to_local()
+        pass
+
+    def add_documents(self, documents: List[Document], embeddings: Embeddings) -> None:
+        pass
+
+    def as_retriever(self, embeddings: Embeddings, search_type: str = "similarity", search_kwargs: Optional[Dict[str, Any]] = None) -> BaseRetriever:
+        pass
+
+    def get_metadata_properties(self):
+        pass
+
+
+
     def __init__(self, config: WeaviateConfig):
         """Initialize Weaviate vector store.
-
-        Args:
-            config: WeaviateConfig dataclass with connection details
-
-        Raises:
-            ValueError: If required config parameters are missing
         """
+
+
         self.config = config
         self._client = None
         self._schema_initialized = False

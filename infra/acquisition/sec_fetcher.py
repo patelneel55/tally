@@ -144,7 +144,6 @@ class EDGARFetcher(IDataFetcher):
             )
         except ValueError as e:
             raise ValidationError(str(e), field=e.args[1] if len(e.args) > 1 else None)
-
         request_hash = self._cache.generate_id(request.model_dump())
         cache_entry = self._cache.get(request_hash)
         filings = pickle.loads(cache_entry["value"]) if cache_entry else None

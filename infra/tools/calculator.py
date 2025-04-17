@@ -1,5 +1,6 @@
 import logging
 import numexpr
+import math
 from typing import ClassVar
 
 from pydantic import BaseModel, Field
@@ -34,7 +35,7 @@ Examples:
             description=self._TOOL_DESCRIPTION,
             args_schema=CalculatorNumExprInput,
         )
-    
+
     async def execute(self, **kwargs) -> str:
         """
         Run the calculator tool.
@@ -46,9 +47,15 @@ Examples:
             str: The resulting expression.
         """
         logger.info(f"📌 TOOL EXECUTION: {self.name}")
+        local_dict = {"pi": math.pi, "e": math.e}
         try:
             calculator_input = CalculatorNumExprInput(**kwargs)
-            return str(numexpr.evaluate(calculator_input.expr.strip()))
+            return str(
+                numexpr.evaluate(
+                    calculator_input.expr.strip(),
+                    local_dict=local_dict,
+                )
+            )
         except Exception as e:
             logger.error(f"Error during Calculator: {e}", exc_info=True)
             raise
