@@ -3,7 +3,7 @@ import json  # Added for JSON support
 import logging
 import os
 import pickle
-from datetime import datetime, timedelta, timezone, date
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Type
@@ -113,7 +113,11 @@ class Cache:
     @classmethod
     def generate_id(cls, data: Any) -> str:
         try:
-            serialized_data = json.dumps(data, default=lambda o: o.isoformat() if isinstance(o, date) else str(o), sort_keys=True)
+            serialized_data = json.dumps(
+                data,
+                default=lambda o: o.isoformat() if isinstance(o, date) else str(o),
+                sort_keys=True,
+            )
         except (TypeError, ValueError) as e:
             if isinstance(data, str):
                 serialized_data = data.strip()

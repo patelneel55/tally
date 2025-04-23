@@ -13,19 +13,17 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 import weaviate
+from langchain_community.retrievers import WeaviateHybridSearchRetriever
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
-from langchain_community.retrievers import WeaviateHybridSearchRetriever
-from weaviate.classes.config import Property, DataType
-from weaviate.exceptions import WeaviateBaseError
-import weaviate
 from weaviate import Client
+from weaviate.classes.config import DataType, Property
+from weaviate.exceptions import WeaviateBaseError
 
-from infra.core.interfaces import IVectorStore
 from infra.core.config import settings
-
+from infra.core.interfaces import IVectorStore
 
 # @dataclass
 # class WeaviateConfig:

@@ -45,7 +45,6 @@ class PipelineTool(BaseTool):
         name: str,
         description: str,
         args_schema: Type[BaseModel],
-        pipeline,
         arg_mapping: Dict[str, str] = None,
     ):
         """
@@ -58,9 +57,16 @@ class PipelineTool(BaseTool):
             arg_mapping: Optional mapping from tool args to pipeline args
         """
         super().__init__(name, description, args_schema)
-
-        self._pipeline = pipeline
         self._arg_mapping = arg_mapping or {}
+        self._pipeline = None  # Lazy loading
+
+    @property
+    def pipeline(self):
+        return self._pipeline
+
+    @pipeline.setter
+    def pipeline(self, value):
+        self._pipeline = value
 
     async def execute(self, **kwargs) -> Any:
         """

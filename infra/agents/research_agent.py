@@ -1,10 +1,10 @@
 import logging
 from typing import Any, Dict, List, Optional, TypedDict, Union, cast
 
-from infra.agents.interfaces import IAgent
-from infra.tools.base import ITool
 from langgraph_supervisor import create_supervisor
 
+from infra.agents.interfaces import IAgent
+from infra.tools.base import ITool
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -30,8 +30,6 @@ logger = logging.getLogger(__name__)
 #             A list of tools available to the agent
 #         """
 #         return self.tools
-
-
 
 
 class ResearchAgentSupervisor:

@@ -7,6 +7,34 @@ from pydantic import BaseModel, Field, field_validator
 from schema import And, Or, Schema, Use
 
 
+class HierarchyMetadata(BaseModel):
+    node_type: str = Field(
+        ..., description="Type of node this entry represents in the hierarchy tree"
+    )
+    level: int = Field(
+        ...,
+        description="The level of the tree of the corresponding chunk associated in source the document",
+    )
+    path: str = Field(
+        ...,
+        description="The path from the root of the tree to the current node. Represented as titles of each of the nodes. Example: 'ROOT' > 'NODE_1' ",
+    )
+    parent: str = Field(
+        ...,
+        description="The title/value of the direct parent node in the tree hierarchy",
+    )
+
+
+class BaseMetadata(BaseModel):
+    source: Optional[str] = Field(
+        default=None, description="Source information for the metadata chunk"
+    )
+    hierarchy: Optional[HierarchyMetadata] = Field(
+        default=None,
+        description="Flattened metadata from a hierarchy tree representing the associated chunk in the original document",
+    )
+
+
 class AcquisitionOutput(abc.ABC):
     """
     Abstract base class for acquisition outputs.
@@ -20,21 +48,11 @@ class AcquisitionOutput(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> BaseMetadata:
         """
         Abstract method to get the metadata from the acquisition output.
         """
         pass
-
-class HierarchyMetadata(BaseModel):
-    node_type: str = Field(..., description="Type of node this entry represents in the hierarchy tree")
-    level: int = Field(..., description="The level of the tree of the corresponding chunk associated in source the document")
-    path: str = Field(..., description="The path from the root of the tree to the current node. Represented as titles of each of the nodes. Example: 'ROOT' > 'NODE_1' ")
-    parent: str = Field(..., description="The title/value of the direct parent node in the tree hierarchy")
-
-class BaseMetadata(BaseModel):
-    source: Optional[str] = Field(..., description="Source information for the metadata chunk")
-    hierarchy: Optional[HierarchyMetadata] = Field(..., description="Flattened metadata from a hierarchy tree representing the associated chunk in the original document")
 
 
 class FilingType(str, Enum):
@@ -54,7 +72,7 @@ class DataFormat(str, Enum):
     PDF = "pdf"
 
 
-class SECFiling(BaseModel, AcquisitionOutput):
+class SECFiling(BaseMetadata, AcquisitionOutput):
     """
     Represents an SEC filing document with associated metadata.
 
@@ -122,6 +140,7 @@ class SECFiling(BaseModel, AcquisitionOutput):
             parts = url.split("/Archives/")
             if len(parts) > 1:
                 return f"https://www.sec.gov/Archives/{parts[1]}"
+        return url
 
 
 sec_api_query_response_schema = Schema(

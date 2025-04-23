@@ -1,5 +1,3 @@
-
-
 class ResearchReportWorkflow:
     def __init__():
         workflow = {}

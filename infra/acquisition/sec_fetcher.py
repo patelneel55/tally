@@ -65,7 +65,7 @@ class FilingRequest(BaseModel):
     )
 
     @field_validator("identifier")
-    def validate_identifier(cls, v):
+    def validate_identifier(cls, v: List[str]):
         """Validate identifier format."""
         if not v:
             raise ValueError("Identifier cannot be empty")
@@ -118,7 +118,7 @@ class EDGARFetcher(IDataFetcher):
             column_mapping=self._CACHE_COLUMNS,
         )
 
-    async def fetch(self, identifiers: List[str], **kwargs) -> List[SECFiling]:
+    async def fetch(self, **kwargs) -> List[SECFiling]:
         """
         Fetch SEC filings for a given identifier.
 
@@ -138,10 +138,7 @@ class EDGARFetcher(IDataFetcher):
         """
         try:
             # Create and validate request model
-            request = FilingRequest(
-                identifier=identifiers,
-                **kwargs,
-            )
+            request = FilingRequest(**kwargs)
         except ValueError as e:
             raise ValidationError(str(e), field=e.args[1] if len(e.args) > 1 else None)
         request_hash = self._cache.generate_id(request.model_dump())

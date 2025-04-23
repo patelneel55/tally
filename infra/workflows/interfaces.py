@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+
 class IWorkflow(ABC):
     """
     Interface for workflows that can predefine set of steps

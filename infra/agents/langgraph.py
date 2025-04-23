@@ -10,8 +10,13 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Optional, TypedDict, Union, cast
 
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.prompts import BasePromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain.prompts import (
+    BasePromptTemplate,
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+)
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
@@ -42,6 +47,7 @@ class LangGraphReActAgent(IAgent):
     queries into smaller sub-tasks, interact with tools, and maintain focus on the
     original objective throughout the process.
     """
+
     def __init__(
         self,
         llm_provider: ILLMProvider,
@@ -62,7 +68,7 @@ class LangGraphReActAgent(IAgent):
         self.verbose = verbose
         self.max_iterations = max_iterations
         self._tools: Dict[str, ITool] = {tool.name: tool for tool in tools}
-        self._graph = None # Lazy initialization
+        self._graph = None  # Lazy initialization
         self._system_prompt = base_prompt
 
     def add_tools(self, tools: List[ITool]) -> None:
@@ -103,12 +109,20 @@ class LangGraphReActAgent(IAgent):
                 tools=list(self._tools.values()),
                 prompt=self._system_prompt.format(),
             )
-            logger.debug(f"Runnable agent created successfully for {self.__class__.__name__}.")
+            logger.debug(
+                f"Runnable agent created successfully for {self.__class__.__name__}."
+            )
             return agent
         except Exception as e:
-            logger.error(f"Failed to build agent runnable for {self.__class__.__name__}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to build agent runnable for {self.__class__.__name__}: {e}",
+                exc_info=True,
+            )
             # Depending on desired behavior, re-raise or return None/handle error
-            raise RuntimeError(f"Could not build runnable for {self.__class__.__name__}") from e
+            raise RuntimeError(
+                f"Could not build runnable for {self.__class__.__name__}"
+            ) from e
+
 
 #         # Create system prompt with enhanced financial analysis context
 #         system_prompt = """You are an intelligent equity research assistant specialized in financial analysis.
@@ -134,231 +148,231 @@ class LangGraphReActAgent(IAgent):
 
 #         # Create the React agent using LangGraph's prebuilt functionality
 #         react_agent = create_react_agent(llm, self.tools)
-#         return 
+#         return
 
-        # # Define the agent workflow
-        # builder = StateGraph(AgentState)
+# # Define the agent workflow
+# builder = StateGraph(AgentState)
 
-        # # Add the initial state preparation node
-        # def prepare_state(state: AgentState) -> Dict:
-        #     """Prepare the initial state for agent execution."""
-        #     query = state["original_query"]
-        #     logger.info(f"🔍 Starting agent with query: {query}")
+# # Add the initial state preparation node
+# def prepare_state(state: AgentState) -> Dict:
+#     """Prepare the initial state for agent execution."""
+#     query = state["original_query"]
+#     logger.info(f"🔍 Starting agent with query: {query}")
 
-        #     return {
-        #         "messages": [
-        #             {"role": "system", "content": system_prompt},
-        #             {"role": "user", "content": query},
-        #         ],
-        #         "tools": state["tools"],
-        #         "tool_results": {},
-        #         "steps": [],
-        #         "original_query": query,
-        #     }
+#     return {
+#         "messages": [
+#             {"role": "system", "content": system_prompt},
+#             {"role": "user", "content": query},
+#         ],
+#         "tools": state["tools"],
+#         "tool_results": {},
+#         "steps": [],
+#         "original_query": query,
+#     }
 
-        # # Add the reasoning node using React pattern
-        # def process_reasoning(state: AgentState) -> Dict:
-        #     """Process agent reasoning and tool execution."""
-        #     # Log the current step number
-        #     current_step = len(state.get("steps", []))
-        #     logger.info(f"🤔 Executing reasoning step {current_step + 1}...")
+# # Add the reasoning node using React pattern
+# def process_reasoning(state: AgentState) -> Dict:
+#     """Process agent reasoning and tool execution."""
+#     # Log the current step number
+#     current_step = len(state.get("steps", []))
+#     logger.info(f"🤔 Executing reasoning step {current_step + 1}...")
 
-        #     # Call the React agent to decide the next action
-        #     result = react_agent.invoke(state)
+#     # Call the React agent to decide the next action
+#     result = react_agent.invoke(state)
 
-        #     # Update state with the agent's reasoning
-        #     new_state = state.copy()
-        #     new_state["messages"] = result["messages"]
+#     # Update state with the agent's reasoning
+#     new_state = state.copy()
+#     new_state["messages"] = result["messages"]
 
-        #     # If agent used a tool, record the result
-        #     if "tool_calls" in result:
-        #         for tool_call in result["tool_calls"]:
-        #             tool_name = tool_call["name"]
-        #             args = tool_call["args"]
-        #             logger.info(f"🔧 Using tool: {tool_name} with args: {args}")
+#     # If agent used a tool, record the result
+#     if "tool_calls" in result:
+#         for tool_call in result["tool_calls"]:
+#             tool_name = tool_call["name"]
+#             args = tool_call["args"]
+#             logger.info(f"🔧 Using tool: {tool_name} with args: {args}")
 
-        #             # Log the result summary (truncated for readability)
-        #             result_text = str(tool_call["result"])
-        #             result_summary = (
-        #                 result_text[:100] + "..."
-        #                 if len(result_text) > 100
-        #                 else result_text
-        #             )
-        #             logger.info(f"📊 Tool result: {result_summary}")
+#             # Log the result summary (truncated for readability)
+#             result_text = str(tool_call["result"])
+#             result_summary = (
+#                 result_text[:100] + "..."
+#                 if len(result_text) > 100
+#                 else result_text
+#             )
+#             logger.info(f"📊 Tool result: {result_summary}")
 
-        #             new_state["tool_results"][tool_call["id"]] = tool_call["result"]
+#             new_state["tool_results"][tool_call["id"]] = tool_call["result"]
 
-        #             # Add the reasoning step
-        #             thought = result.get("thought", "")
-        #             logger.info(
-        #                 f"💭 Agent thought: {thought[:150]}..."
-        #                 if len(thought) > 150
-        #                 else thought
-        #             )
+#             # Add the reasoning step
+#             thought = result.get("thought", "")
+#             logger.info(
+#                 f"💭 Agent thought: {thought[:150]}..."
+#                 if len(thought) > 150
+#                 else thought
+#             )
 
-        #             new_state["steps"].append(
-        #                 {
-        #                     "thought": thought,
-        #                     "action": tool_name,
-        #                     "action_input": args,
-        #                     "result": tool_call["result"],
-        #                 }
-        #             )
-        #     else:
-        #         # If no tool was used, the agent might be answering
-        #         logger.info("📝 Agent is formulating an answer (no tool used)")
+#             new_state["steps"].append(
+#                 {
+#                     "thought": thought,
+#                     "action": tool_name,
+#                     "action_input": args,
+#                     "result": tool_call["result"],
+#                 }
+#             )
+#     else:
+#         # If no tool was used, the agent might be answering
+#         logger.info("📝 Agent is formulating an answer (no tool used)")
 
-        #         # Try to extract thought if available
-        #         thought = result.get("thought", "")
-        #         if thought:
-        #             logger.info(
-        #                 f"💭 Agent thought: {thought[:150]}..."
-        #                 if len(thought) > 150
-        #                 else thought
-        #             )
+#         # Try to extract thought if available
+#         thought = result.get("thought", "")
+#         if thought:
+#             logger.info(
+#                 f"💭 Agent thought: {thought[:150]}..."
+#                 if len(thought) > 150
+#                 else thought
+#             )
 
-        #     return new_state
+#     return new_state
 
-        # # Check if we should end the process
-        # def should_end(state: AgentState) -> Union[bool, str]:
-        #     """Determine if the agent execution should end."""
-        #     # If we've reached max iterations
-        #     if len(state["steps"]) >= self.max_iterations:
-        #         logger.warning(f"⚠️ Reached maximum iterations ({self.max_iterations})")
-        #         return True
+# # Check if we should end the process
+# def should_end(state: AgentState) -> Union[bool, str]:
+#     """Determine if the agent execution should end."""
+#     # If we've reached max iterations
+#     if len(state["steps"]) >= self.max_iterations:
+#         logger.warning(f"⚠️ Reached maximum iterations ({self.max_iterations})")
+#         return True
 
-        #     # Check the latest message for finish indication
-        #     messages = state["messages"]
-        #     if messages:
-        #         last_message = messages[-1]
-        #         # Check if it's an assistant message (AIMessage in LangChain)
-        #         if hasattr(last_message, "type") and last_message.type == "ai":
-        #             content = last_message.content
-        #             # Look for React's final answer pattern
-        #             if "Final Answer:" in content:
-        #                 logger.info("✅ Agent reached final answer")
-        #                 return True
-        #         # For backward compatibility with dictionary messages
-        #         elif (
-        #             isinstance(last_message, dict)
-        #             and last_message.get("role") == "assistant"
-        #         ):
-        #             content = last_message["content"]
-        #             if "Final Answer:" in content:
-        #                 logger.info("✅ Agent reached final answer")
-        #                 return True
+#     # Check the latest message for finish indication
+#     messages = state["messages"]
+#     if messages:
+#         last_message = messages[-1]
+#         # Check if it's an assistant message (AIMessage in LangChain)
+#         if hasattr(last_message, "type") and last_message.type == "ai":
+#             content = last_message.content
+#             # Look for React's final answer pattern
+#             if "Final Answer:" in content:
+#                 logger.info("✅ Agent reached final answer")
+#                 return True
+#         # For backward compatibility with dictionary messages
+#         elif (
+#             isinstance(last_message, dict)
+#             and last_message.get("role") == "assistant"
+#         ):
+#             content = last_message["content"]
+#             if "Final Answer:" in content:
+#                 logger.info("✅ Agent reached final answer")
+#                 return True
 
-        #     return False
+#     return False
 
-        # # Define the graph structure
-        # builder.add_node("prepare", prepare_state)
-        # builder.add_node("reason", process_reasoning)
+# # Define the graph structure
+# builder.add_node("prepare", prepare_state)
+# builder.add_node("reason", process_reasoning)
 
-        # # Add edges
-        # builder.set_entry_point("prepare")
-        # builder.add_edge("prepare", "reason")
-        # builder.add_conditional_edges(
-        #     "reason", should_end, {True: END, False: "reason"}
-        # )
+# # Add edges
+# builder.set_entry_point("prepare")
+# builder.add_edge("prepare", "reason")
+# builder.add_conditional_edges(
+#     "reason", should_end, {True: END, False: "reason"}
+# )
 
-        # return builder.compile()
+# return builder.compile()
 
-    # def _extract_final_answer(self, state: AgentState) -> str:
-    #     """
-    #     Extract the final answer from the agent state.
+# def _extract_final_answer(self, state: AgentState) -> str:
+#     """
+#     Extract the final answer from the agent state.
 
-    #     Args:
-    #         state: The final agent state
+#     Args:
+#         state: The final agent state
 
-    #     Returns:
-    #         The final answer as a string
-    #     """
-    #     messages = state["messages"]
-    #     if not messages:
-    #         return "No answer was generated."
+#     Returns:
+#         The final answer as a string
+#     """
+#     messages = state["messages"]
+#     if not messages:
+#         return "No answer was generated."
 
-    #     # Find the last assistant message
-    #     last_message = messages[-1]
-    #     content = ""
+#     # Find the last assistant message
+#     last_message = messages[-1]
+#     content = ""
 
-    #     # Handle different message types
-    #     if hasattr(last_message, "type") and last_message.type == "ai":
-    #         content = last_message.content
-    #     elif isinstance(last_message, dict) and last_message.get("role") == "assistant":
-    #         content = last_message["content"]
-    #     else:
-    #         # Try to find the last assistant message
-    #         for msg in reversed(messages):
-    #             if (hasattr(msg, "type") and msg.type == "ai") or (
-    #                 isinstance(msg, dict) and msg.get("role") == "assistant"
-    #             ):
-    #                 if hasattr(msg, "content"):
-    #                     content = msg.content
-    #                 elif isinstance(msg, dict):
-    #                     content = msg.get("content", "")
-    #                 break
+#     # Handle different message types
+#     if hasattr(last_message, "type") and last_message.type == "ai":
+#         content = last_message.content
+#     elif isinstance(last_message, dict) and last_message.get("role") == "assistant":
+#         content = last_message["content"]
+#     else:
+#         # Try to find the last assistant message
+#         for msg in reversed(messages):
+#             if (hasattr(msg, "type") and msg.type == "ai") or (
+#                 isinstance(msg, dict) and msg.get("role") == "assistant"
+#             ):
+#                 if hasattr(msg, "content"):
+#                     content = msg.content
+#                 elif isinstance(msg, dict):
+#                     content = msg.get("content", "")
+#                 break
 
-    #     if not content:
-    #         return "No answer was generated."
+#     if not content:
+#         return "No answer was generated."
 
-    #     # Extract the final answer section if present
-    #     if "Final Answer:" in content:
-    #         _, answer = content.split("Final Answer:", 1)
-    #         return answer.strip()
+#     # Extract the final answer section if present
+#     if "Final Answer:" in content:
+#         _, answer = content.split("Final Answer:", 1)
+#         return answer.strip()
 
-    #     return content.strip()
+#     return content.strip()
 
-    # async def run(self, task: str, **kwargs) -> Any:
-    #     """
-    #     Run the agent on a specific task.
+# async def run(self, task: str, **kwargs) -> Any:
+#     """
+#     Run the agent on a specific task.
 
-    #     The agent will break down the task into smaller sub-tasks and use its tools
-    #     to accomplish the overall objective.
+#     The agent will break down the task into smaller sub-tasks and use its tools
+#     to accomplish the overall objective.
 
-    #     Args:
-    #         task: The task to perform
-    #         **kwargs: Additional arguments for the agent
+#     Args:
+#         task: The task to perform
+#         **kwargs: Additional arguments for the agent
 
-    #     Returns:
-    #         The result of the agent's execution
-    #     """
-    #     logger.info(f"🧠 Running LangGraph agent with task: {task}")
-    #     logger.info(
-    #         f"🧰 Available tools: {', '.join([tool.name for tool in self.tools])}"
-    #     )
+#     Returns:
+#         The result of the agent's execution
+#     """
+#     logger.info(f"🧠 Running LangGraph agent with task: {task}")
+#     logger.info(
+#         f"🧰 Available tools: {', '.join([tool.name for tool in self.tools])}"
+#     )
 
-    #     # Create graph if it hasn't been created already
-    #     if self._graph is None:
-    #         logger.info("🔄 Creating LangGraph workflow")
-    #         self._graph = self._create_graph()
+#     # Create graph if it hasn't been created already
+#     if self._graph is None:
+#         logger.info("🔄 Creating LangGraph workflow")
+#         self._graph = self._create_graph()
 
-    #     # Prepare initial state
-    #     initial_state = {
-    #         "messages": [],
-    #         "tools": self.tools,
-    #         "tool_results": {},
-    #         "steps": [],
-    #         "original_query": task,
-    #     }
+#     # Prepare initial state
+#     initial_state = {
+#         "messages": [],
+#         "tools": self.tools,
+#         "tool_results": {},
+#         "steps": [],
+#         "original_query": task,
+#     }
 
-    #     # Execute the graph
-    #     try:
-    #         logger.info("🚀 Starting LangGraph execution")
-    #         final_state = self._graph.invoke(initial_state)
+#     # Execute the graph
+#     try:
+#         logger.info("🚀 Starting LangGraph execution")
+#         final_state = self._graph.invoke(initial_state)
 
-    #         # Extract and return the final answer
-    #         result = self._extract_final_answer(final_state)
-    #         logger.info(
-    #             f"✅ Agent completed task successfully after {len(final_state.get('steps', []))} steps"
-    #         )
+#         # Extract and return the final answer
+#         result = self._extract_final_answer(final_state)
+#         logger.info(
+#             f"✅ Agent completed task successfully after {len(final_state.get('steps', []))} steps"
+#         )
 
-    #         # If in verbose mode, include the reasoning steps
-    #         if self.verbose:
-    #             steps = final_state.get("steps", [])
-    #             return {"answer": result, "steps": steps, "num_steps": len(steps)}
+#         # If in verbose mode, include the reasoning steps
+#         if self.verbose:
+#             steps = final_state.get("steps", [])
+#             return {"answer": result, "steps": steps, "num_steps": len(steps)}
 
-    #         return result
+#         return result
 
-    #     except Exception as e:
-    #         logger.error(f"❌ Agent execution failed: {str(e)}")
-    #         raise
+#     except Exception as e:
+#         logger.error(f"❌ Agent execution failed: {str(e)}")
+#         raise

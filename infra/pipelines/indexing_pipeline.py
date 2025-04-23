@@ -21,10 +21,10 @@ from infra.core.interfaces import (
     IDataFetcher,
     IDocumentLoader,
     IEmbeddingProvider,
+    ILLMProvider,
     IParser,
     ISplitter,
     IVectorStore,
-    ILLMProvider,
 )
 from infra.ingestion.web_loader import WebLoader
 from infra.parsers.html_parser import HTMLParser
@@ -119,15 +119,7 @@ class IndexingPipeline:
                 f"Document {doc.metadata.get('source', 'unknown')}, index {i} written to {output_path}"
             )
 
-    async def run(
-        self,
-        *,
-        identifier: str,
-        filing_type: Union[FilingType, str],
-        data_format: DataFormat = DataFormat.HTML,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ):
+    async def run(self, **kwargs):
         """
         Run the complete indexing pipeline.
 
@@ -140,44 +132,36 @@ class IndexingPipeline:
         Returns:
             List of document chunks that were indexed
         """
-        logger.info(f"Starting indexing pipeline for {identifier} {filing_type.value}")
+        logger.info(f"Starting indexing pipeline")
 
         # Convert string filing type to enum if needed
-        if isinstance(filing_type, str):
-            filing_type = FilingType(filing_type)
+        # if isinstance(filing_type, str):
+        #     filing_type = FilingType(filing_type)
 
         try:
             # Step 1: Fetch filings
-            filings = await self.fetcher.fetch(
-                identifiers=[identifier],
-                filing_type=filing_type,
-                data_format=data_format,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            logger.info(
-                f"Found {len(filings)} {filing_type.value} filings for {identifier}"
-            )
+            filings = await self.fetcher.fetch(**kwargs)
+            logger.info(f"Found {len(filings)} filings")
 
             # Step 2: Load documents
             docs = await self.loader.load(filings)
             logger.info(f"Loaded {len(docs)} documents")
-            if self.should_save_intermediates:
-                self.save_docs(docs, "load", identifier, filing_type.value, "html")
+            # if self.should_save_intermediates:
+            #     self.save_docs(docs, "load", identifier, filing_type.value, "html")
 
             # Step 3: Parse documents
             parsed_docs = self.parser.parse(docs)
             logger.info(f"Parsed into {len(parsed_docs)} documents")
-            if self.should_save_intermediates:
-                self.save_docs(
-                    parsed_docs, "parse", identifier, filing_type.value, "md"
-                )
+            # if self.should_save_intermediates:
+            #     self.save_docs(
+            #         parsed_docs, "parse", identifier, filing_type.value, "md"
+            #     )
 
             # Step 4: Split documents
             split_docs = await self.splitter.split_documents(parsed_docs)
             logger.info(f"Split into {len(split_docs)} chunks")
-            if self.should_save_intermediates:
-                self.save_docs(split_docs, "split", identifier, filing_type.value, "md")
+            # if self.should_save_intermediates:
+            #     self.save_docs(split_docs, "split", identifier, filing_type.value, "md")
 
             # Step 5: Embed and index documents
             if self.embedding_provider and self.vector_store:
@@ -192,7 +176,5 @@ class IndexingPipeline:
             return split_docs
 
         except Exception as e:
-            logger.error(
-                f"Error in indexing pipeline for {identifier} {filing_type.value}: {e}"
-            )
+            logger.error(f"Error in indexing pipeline: {e}")
             raise

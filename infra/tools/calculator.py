@@ -1,16 +1,18 @@
 import logging
-import numexpr
 import math
 from typing import ClassVar
 
+import numexpr
 from pydantic import BaseModel, Field
 
 from infra.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
+
 class CalculatorNumExprInput(BaseModel):
     expr: str = Field(description="Python numexpr compatbile expression to be solved")
+
 
 class CalculatorTool(BaseTool):
     """
@@ -18,7 +20,9 @@ class CalculatorTool(BaseTool):
     """
 
     _TOOL_NAME: ClassVar[str] = "math_tool"
-    _TOOL_DESCRIPTION: ClassVar[str] = """
+    _TOOL_DESCRIPTION: ClassVar[
+        str
+    ] = """
 Calculate expression using Python's numexpr library.
 Expression should be a single line mathematical expression
 that solves the problem which should be a supported input for the

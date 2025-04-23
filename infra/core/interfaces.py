@@ -32,7 +32,7 @@ class IDataFetcher(ABC):
     """
 
     @abstractmethod
-    async def fetch(self, identifiers: List[str], **kwargs) -> Any:
+    async def fetch(self, **kwargs) -> Any:
         """
         Fetch data for a given identifier.
 

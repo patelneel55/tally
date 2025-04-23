@@ -1,17 +1,22 @@
 import logging
 from typing import Any, Dict, List, Optional, TypedDict, Union, cast
 
-from langchain.prompts import BasePromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain.prompts import (
+    BasePromptTemplate,
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
 
 from infra.agents.interfaces import IAgent
-from infra.tools.base import ITool
-from infra.core.interfaces import ILLMProvider
 from infra.agents.langgraph import LangGraphReActAgent
+from infra.core.interfaces import ILLMProvider
+from infra.tools.base import ITool
 from infra.tools.calculator import CalculatorTool
-
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
 
 class MathAgent(LangGraphReActAgent):
 
@@ -43,4 +48,3 @@ Respond concisely with the calculation result or status. Use the provided tools 
             tools=math_tools,
             base_prompt=prompt,
         )
-

@@ -1,0 +1,74 @@
+import json
+from typing import Dict, List, Optional, Type
+
+from pydantic import BaseModel, Field, field_validator
+
+from infra.acquisition.models import BaseMetadata, SECFiling
+from infra.acquisition.sec_fetcher import EDGARFetcher, FilingRequest
+from infra.ingestion.web_loader import WebLoader
+from infra.llm.providers import OpenAIProvider
+from infra.pipelines.indexing_pipeline import IndexingPipeline
+from infra.preprocessing.sec_parser import SECParser, SECSplitter
+
+
+class CollectionSchema(BaseModel):
+    name: str
+    description: str
+    metadata_model: Type[BaseMetadata]
+    example_queries: Optional[List[str]]
+    indexer: IndexingPipeline
+    indexer_schema: Type[BaseModel]
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def json_schema(self) -> str:
+        base = self.model_dump(exclude={"metadata_model", "indexer", "indexer_schema"})
+        base["metadata_schema"] = self.metadata_model.model_json_schema()
+        return json.dumps(base, indent=2)
+
+
+class MetadataSchemaRegistry(BaseModel):
+    registry: Dict[str, CollectionSchema]
+
+    def get_collection(self, collection: str) -> CollectionSchema:
+        if collection not in self.registry:
+            raise ValueError(
+                f"invalid collection name provided, '{collection}' is not a registered collection"
+            )
+        return self.registry[collection]
+
+    def all_collections(self) -> List[CollectionSchema]:
+        return list(self.registry.values())
+
+    def json_schema(self) -> str:
+        collections = []
+        for col in self.all_collections():
+            collections.append(json.loads(col.json_schema()))
+        return json.dumps(collections, indent=2)
+
+
+schema_registry = MetadataSchemaRegistry(
+    registry={
+        "SECFilings": CollectionSchema(
+            name="SECFilings",
+            description="Vector chunks from SEC filings like 10-K, 10-Q, 8-K etc.",
+            metadata_model=SECFiling,
+            example_queries=[],
+            indexer=IndexingPipeline(
+                fetcher=EDGARFetcher(),
+                loader=WebLoader(crawl_strategy="all", max_crawl_depth=0),
+                parser=SECParser(),
+                splitter=SECSplitter(),
+                llm_provider=OpenAIProvider(),
+            ),
+            indexer_schema=FilingRequest,
+        ),
+        # "EarningsCall": CollectionSchema(
+        #     name="EarningsCall",
+        #     description="Vector chunks from analyst earnings calls",
+        #     metadata_model=SECFiling,
+        #     example_queries=[],
+        # ),
+    }
+)
