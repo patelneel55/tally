@@ -173,7 +173,7 @@ class IndexingPipeline:
                     "Embedding provider or vector store not provided, skipping indexing step"
                 )
 
-            return split_docs
+            return f"Successfully indexed {len(split_docs)} document chunks into the '{self.vector_store.collection_name}' collection. You may now search the collection for relevant documents."
 
         except Exception as e:
             logger.error(f"Error in indexing pipeline: {e}")

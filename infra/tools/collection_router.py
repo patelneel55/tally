@@ -116,7 +116,6 @@ Example:
             # Match ```json\n or ```\n at the start and ``` at the end
             schemas = re.sub(r"^```(?:json)?\n?", "", schemas.strip())
             schemas = re.sub(r"\n?```$", "", schemas)
-        logger.info(f"LLM Response: {schemas}")
 
         try:
             collection_names = json.loads(schemas)

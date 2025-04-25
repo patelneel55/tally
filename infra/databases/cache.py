@@ -82,12 +82,12 @@ class Cache:
 
         # Create table if it doesn't exist using this specific model's metadata
         try:
-            logger.info(f"Ensuring cache table '{self.table_name}' exists...")
+            logger.debug(f"Ensuring cache table '{self.table_name}' exists...")
             # Create only the specific table associated with this model
             self._cache_model.metadata.create_all(
                 self.engine, tables=[self._cache_model.__table__]
             )
-            logger.info(f"Cache table '{self.table_name}' ready.")
+            logger.debug(f"Cache table '{self.table_name}' ready.")
         except SQLAlchemyError as e:
             logger.error(
                 f"Failed to create or access cache table '{self.table_name}': {e}",
@@ -101,7 +101,7 @@ class Cache:
         self._SessionLocal = sessionmaker(
             autocommit=False, autoflush=False, bind=self.engine
         )
-        logger.info(f"Cache initialized for table '{self.table_name}'.")
+        logger.debug(f"Cache initialized for table '{self.table_name}'.")
 
         if settings.USE_LOCAL_CACHE:
             self.cache_dir = Path(settings.LOCAL_CACHE_DIR) / self.table_name
@@ -352,7 +352,7 @@ class Cache:
                 )
                 session.merge(entry)
                 session.commit()
-                logger.info(
+                logger.debug(
                     f"Successfully wrote cache for key '{key}' in '{self.table_name}'."
                 )
                 return True
@@ -384,7 +384,7 @@ class Cache:
                 if entry:
                     session.delete(entry)
                     session.commit()
-                    logger.info(
+                    logger.debug(
                         f"Successfully deleted cache for key '{key}' from '{self.table_name}'."
                     )
                     return True
@@ -418,7 +418,7 @@ class Cache:
             with self._SessionLocal() as session:
                 num_deleted = session.query(self._cache_model).delete()
                 session.commit()
-                logger.info(
+                logger.debug(
                     f"Successfully cleared {num_deleted} entries from '{self.table_name}'."
                 )
                 return True
@@ -438,7 +438,7 @@ class Cache:
 
     def prune_expired(self) -> int:
         """Deletes all expired cache entries from this specific cache table."""
-        logger.info(f"Pruning expired entries from cache table '{self.table_name}'...")
+        logger.debug(f"Pruning expired entries from cache table '{self.table_name}'...")
         num_deleted = 0
         try:
             with self._SessionLocal() as session:
@@ -449,7 +449,7 @@ class Cache:
                 result = session.execute(stmt)
                 session.commit()
                 num_deleted = result.rowcount
-                logger.info(
+                logger.debug(
                     f"Successfully pruned {num_deleted} expired entries from '{self.table_name}'."
                 )
         except SQLAlchemyError as e:

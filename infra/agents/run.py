@@ -15,12 +15,12 @@ from infra.agents.data_index_agent import DataIndexAgent
 from infra.agents.math_agent import MathAgent
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
-from infra.vector_stores.chromadb import ChromaVectorStore
+from infra.vector_stores.weaviate import WeaviateVectorStore
 
 if __name__ == "__main__":
 
     async def run():
-        vector_store = ChromaVectorStore()
+        vector_store = WeaviateVectorStore()
         embeddings = OpenAIEmbeddingProvider()
         llm_provider = OpenAIProvider()
         agent = DataIndexAgent(
@@ -36,7 +36,8 @@ if __name__ == "__main__":
                 "messages": [
                     {
                         "role": "user",
-                        "content": "What are the latest risk factors for Apple?",
+                        # "content": "What were JPM's comment's about commercial real estate looking forward in 2024?",
+                        "content": "Today's date is April 23rd 2025. What is the net income of Google (GOOG) in 2022?",
                     }
                 ]
             },

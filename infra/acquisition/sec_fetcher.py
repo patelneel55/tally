@@ -155,6 +155,8 @@ class EDGARFetcher(IDataFetcher):
 
         # Fetch filings from SEC API
         filings_data = await self._fetch_filings_from_api(search_query)
+        if len(filings_data) == 0:
+            raise ValueError("No filings found, please check the input parameters")
 
         self._cache.write(
             request_hash,

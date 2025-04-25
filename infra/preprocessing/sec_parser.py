@@ -163,7 +163,7 @@ class SECSplitter(ISplitter):
             return
 
         if self.table_summarizer is None:
-            logger.warning(
+            logger.debug(
                 f"LLM Provider not specified, proceeding without LLM. Using raw table."
             )
             self._md_table_cache.write(table_hash, markdown=markdown_table)

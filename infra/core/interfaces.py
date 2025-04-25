@@ -20,7 +20,7 @@ from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
-
+from infra.acquisition.models import AcquisitionOutput
 
 class IDataFetcher(ABC):
     """
@@ -129,7 +129,7 @@ class IDocumentLoader(ABC):
     """
 
     @abstractmethod
-    async def load(self, sources: List[Any]) -> List[Document]:
+    async def load(self, sources: List[AcquisitionOutput]) -> List[Document]:
         """
         Loads content from the given URI into Document objects.
 
@@ -249,6 +249,15 @@ class IVectorStore(abc.ABC):
             VectorStoreError: If adding documents fails.
             EmbeddingError: If embedding the documents fails.
         """
+        pass
+
+    @property
+    @abc.abstractmethod
+    def collection_name(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    def set_collection(self, name: str, metadata: Dict):
         pass
 
     @abc.abstractmethod

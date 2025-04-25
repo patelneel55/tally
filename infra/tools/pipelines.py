@@ -84,5 +84,6 @@ Arguments:
             return json.dumps(schema)
         self.pipeline = collection.indexer
         self.pipeline.embedding_provider = self._embedding_provider
+        self._vector_store.set_collection(collection.name, collection.metadata_model.__annotations__)
         self.pipeline.vector_store = self._vector_store
         return await super().execute(**tool_input.input_values)

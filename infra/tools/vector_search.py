@@ -42,8 +42,6 @@ Your job is to:
     Formulate a semantic query that captures the user's intent.
     Identify and include only the necessary metadata filters—these are filters without which the search would be too vague or
     incorrect (e.g., a company ticker for SEC filings).
-    Avoid unnecessary filters. If a detail is not explicitly known or mentioned
-    (e.g., a specific filing date), do not include it. Do not run a request without a filter.
 
 Example Use Case:
 User says: "What did Amazon say about advertising revenue last quarter?"
@@ -77,7 +75,7 @@ You should produce:
                 f"Content: {content}\n"
                 f"--- End Document {i + 1} ---\n"
             )
-            return "\n".join(formatted_output)
+        return "\n".join(formatted_output) if len(res) > 0 else None
 
     async def execute(self, **kwargs):
         try:
@@ -86,6 +84,7 @@ You should produce:
             search_kwargs = {"k": search_query.k}
             if search_query.filters:
                 search_kwargs["filter"] = search_query.filters
+            self._vector_store.set_collection(search_query.collection, search_query.filters)
             retriever = self._vector_store.as_retriever(
                 embeddings=embeddings,
                 search_type="similarity",
