@@ -1,0 +1,16 @@
+{
+  "_checkout": "2022.6.3",
+  "_output_dir": "/mnt/c/Users/Neel/Documents/GitHub/analystai",
+  "_repo_dir": "/home/neel/.cookiecutters/cookiecutter-hypermodern-python",
+  "_template": "gh:cjolowicz/cookiecutter-hypermodern-python",
+  "author": "Neel Patel",
+  "copyright_year": "2025",
+  "development_status": "Development Status :: 2 - Pre-Alpha",
+  "email": "patelneel55@gmail.com",
+  "friendly_name": "Tally",
+  "github_user": "patelneel55",
+  "license": "GPL-3.0",
+  "package_name": "tally",
+  "project_name": "tally",
+  "version": "0.0.0"
+}

@@ -92,3 +92,55 @@ result = await agent.run("Analyze Apple's R&D expenditures from 2020-2023")
 ```
 
 In this implementation, the agent can handle complex financial analysis queries by intelligently breaking them down, using financial data tools, and maintaining focus on the original objective throughout the process.
+
+## WebLoader and Tests
+
+### tally/src/infra/ingestion/web_loader.py
+**Purpose**: Provides a document loader for web content that can crawl websites and extract content.
+
+**Key Components**:
+- `CrawlStrategy` enum: Defines different strategies for crawling websites (same hostname, same domain, etc.)
+- `CrawlConfig` class: Configuration for crawling parameters
+- `WebLoader` class: Implements the `IDocumentLoader` interface to load and process web content
+
+**Key Logic**:
+- Uses PlaywrightCrawler for crawling web pages
+- Implements caching for efficient retrieval of previously crawled content
+- Processes HTML content into Document objects for further processing
+
+### tally/tests/unit/infra/ingestion/test_web_loader.py
+**Purpose**: Tests for the WebLoader class to ensure it behaves as expected.
+
+**Test Suite Components**:
+- Mock classes for PlaywrightCrawler, Cache, and related components
+- Tests for initialization with default and custom values
+- Tests for crawling behavior with and without cached responses
+- Tests for the cache hook functionality that intercepts requests
+
+**Key Decisions**:
+- Used mocks to avoid making actual web requests during tests
+- Tested both cached and non-cached scenarios
+- Validated core functionality while isolating external dependencies
+
+## Test Architecture and Shared Fixtures
+
+### tally/tests/unit/conftest.py
+**Purpose**: Provides shared test fixtures that can be used across all unit tests.
+
+**Key Components**:
+- `mock_sqlalchemy_engine`: Mocks the database engine to avoid actual database connections
+- `mock_cache`: Provides a mock implementation of the Cache class for testing
+- `mock_settings`: Provides mock application settings for testing
+
+### tally/tests/unit/infra/ingestion/conftest.py
+**Purpose**: Provides shared test fixtures specific to the ingestion module.
+
+**Key Components**:
+- Mock classes for web components (PlaywrightCrawler, Page, Request, etc.)
+- `mock_playwright_crawler`: A fixture to mock the PlaywrightCrawler class
+
+**Key Decisions**:
+- Structured fixtures at different levels for better organization and reuse
+- Root-level fixtures (`unit/conftest.py`) for widely used components
+- Module-specific fixtures in module-specific conftest.py files
+- Mock implementations mimic the behavior of real objects while avoiding actual external calls
