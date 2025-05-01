@@ -1,26 +1,60 @@
-import asyncio
 import logging
 import re
-import time
 import warnings
-from typing import List
+from typing import List, Optional
+import json
 
+import asyncio
+import uuid
 import sec_parser as sp
+from sec_parser.processing_steps import SupplementaryTextClassifier
 from infra.llm.models import ILLMProvider
 from langchain_core.documents import Document
-from sqlalchemy import UnicodeText
+from sqlalchemy import UnicodeText, JSON, DateTime
 from sqlalchemy.orm import mapped_column
+from pathlib import Path
+from pydantic import BaseModel, Field
 
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
 from infra.preprocessing.models import IParser
-from infra.preprocessing.models import ISplitter
-from infra.preprocessing.models import SemanticDocument
-from infra.tools.table_summarizer import TableSummarizerInput
-from infra.tools.table_summarizer import TableSummarizerTool
+from infra.tools.summarizer import SummarizerInput, SummarizerTool
+from infra.collections.models import ChunkType, BaseMetadata, HierarchyMetadata
+from infra.acquisition.sec_fetcher import SECFiling
 
 
 logger = logging.getLogger(__name__)
+
+
+class MemoryTreeNode(BaseModel):
+    id: str = Field(description="Unique identifier for the node in the memory tree.")
+    summary: str = Field(..., description="Summary of the node's content.")
+    content: str = Field(..., description="Raw content of the node")
+    node_type: ChunkType = Field(
+        default=ChunkType.TEXT, description="Type of the node."
+    )
+    metadata: Optional[BaseMetadata] = Field(
+        default=None, description="Metadata associated with the node."
+    )
+
+    children: Optional[List["MemoryTreeNode"]] = Field(
+        default_factory=list,
+        description="List of child nodes in the memory tree.",
+    )
+
+
+def write_content_to_file(content: str, filename: str) -> None:
+    """
+    Write the content to a file.
+
+    Args:
+        content (str): The content to write.
+        filename (str): The name of the file to write to.
+    """
+    path = Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(content)
 
 
 class SECParser(IParser):
@@ -28,72 +62,41 @@ class SECParser(IParser):
     Parser for SEC filings using the sec-parser library.
     """
 
-    def __init__(self):
+    def __init__(self, llm_provider: ILLMProvider):
         """Initialize the SEC parser."""
-        pass
-
-    def parse(self, docs: List[Document]) -> List[Document]:
-        parser = sp.Edgar10QParser()
-        parsed_docs = []
-        for doc in docs:
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", message="Invalid section type for")
-                elements: list = parser.parse(doc.page_content)
-            bldr = sp.TreeBuilder()
-            tree = bldr.build(elements)
-            # Convert the parsed tree into a list of SemanticDocument
-            parsed_docs.append(SemanticDocument(tree, doc.metadata))
-        return parsed_docs
-
-
-class SECSplitter(ISplitter):
-    """
-    Splitter for SEC filings using the sec-parser library.
-    """
-
-    _TABLE_SUMMARY_TABLE_NAME = "markdown_tables_summary"
-
-    def __init__(self, llm_provider: ILLMProvider = None):
-        """Initialize the SEC splitter."""
         self.llm_provider = llm_provider
-        self.table_summarizer = (
-            TableSummarizerTool(llm_provider) if llm_provider else None
-        )
+        self.summarizer = SummarizerTool(llm_provider)
 
-        self._md_table_cache = Cache(
+        self.summary_cache = Cache(
             engine=get_sqlalchemy_engine(),
-            table_name=self._TABLE_SUMMARY_TABLE_NAME,
+            table_name="sec_filing_summary",
             column_mapping={
-                "markdown": mapped_column(UnicodeText, nullable=False),
-                "summary": mapped_column(UnicodeText, nullable=True),
+                "ticker": mapped_column(UnicodeText, nullable=False),
+                "filing_type": mapped_column(UnicodeText, nullable=False),
+                "filing_date": mapped_column(DateTime(timezone=True), nullable=False),
+                "original_text": mapped_column(UnicodeText, nullable=False),
+                "summary": mapped_column(UnicodeText, nullable=False),
+            },
+        )
+        self.hierarchy_cache = Cache(
+            engine=get_sqlalchemy_engine(),
+            table_name="sec_filing_hierarchy",
+            column_mapping={
+                "ticker": mapped_column(UnicodeText, nullable=False),
+                "filing_type": mapped_column(UnicodeText, nullable=False),
+                "filing_date": mapped_column(DateTime(timezone=True), nullable=False),
+                "document_structure": mapped_column(JSON, nullable=False),
             },
         )
 
-    async def split_documents(self, documents: List[Document]) -> List[Document]:
-        """
-        Splits the documents into sections based on the SemanticTree structure.
-        Args:
-            documents (List[Document]): List of documents to split (type SemanticTree).
-        Returns:
-            List[Document]: List of split documents.
-        """
-
-        split_documents = []
-        for doc in documents:
-            if isinstance(doc, SemanticDocument):
-                # Convert SemanticDocument to Document
-                split_docs = await self._convert_tree_to_documents(
-                    doc.as_tree(), doc.metadata
-                )
-                split_documents.extend(split_docs)
-            else:
-                raise TypeError(
-                    f"Document must be of type SemanticDocument, but got {type(doc).__name__}"
-                )
-        return split_documents
+    def get_classifer_steps(self) -> list:
+        steps = sp.Edgar10QParser().get_default_steps()
+        return [
+            step for step in steps if not isinstance(step, SupplementaryTextClassifier)
+        ]
 
     async def _convert_tree_to_documents(
-        self, tree: sp.SemanticTree, metadata: dict
+        self, tree: sp.SemanticTree, metadata: BaseMetadata
     ) -> List[Document]:
         """
         Convert the parsed tree into a list of Document objects.
@@ -105,36 +108,220 @@ class SECSplitter(ISplitter):
         Returns:
             List of Document objects with structured SEC filing data
         """
-        table_tasks = await self._collect_table_tasks(tree)
-        if table_tasks:
-            logger.debug(f"Processing {len(table_tasks)} tables in parallel")
-            start_time = time.time()
-            await asyncio.gather(*table_tasks)
-            end_time = time.time()
-            logger.debug(
-                f"Processed {len(table_tasks)} tables in {end_time - start_time:.2f} seconds"
-            )
+        metadata = SECFiling(**metadata.model_dump())
+        metadata_hash = self.hierarchy_cache.generate_id(metadata.flatten_dict())
+        hierarchy_entry = self.hierarchy_cache.get(metadata_hash)
+        if not hierarchy_entry or not hierarchy_entry["document_structure"]:
+            children_memories: List[MemoryTreeNode] = []
+            for root_node in tree:
+                # Process each root node and its children
+                memory_tree = await self._create_document_structure(root_node, metadata)
+                if memory_tree:
+                    children_memories.append(memory_tree)
 
-        documents = []
-        for root_node in tree:
-            # Process each root node and its children
-            chunks = await self._flatten_tree(root_node, metadata)
-            documents.extend(chunks)
-        return documents
-
-    async def _collect_table_tasks(self, tree: sp.SemanticTree):
-        """
-        Collect all tables in the tree to parse as asyncio tasks.
-        """
-        table_tasks = []
-        for node in tree.nodes:
-            if isinstance(node.semantic_element, sp.TableElement):
-                table_tasks.append(
-                    asyncio.create_task(
-                        self._process_table(node.semantic_element.table_to_markdown())
+            if len(children_memories) == 1:
+                root_tree_node = children_memories[0]
+            else:
+                mega_summaries = self._construct_summaries(children_memories, "")
+                content_hash = self.summary_cache.generate_id(mega_summaries)
+                cache_entry = self.summary_cache.get(content_hash)
+                if not cache_entry or not cache_entry["summary"]:
+                    summarizer_input = SummarizerInput(input=mega_summaries)
+                    summary = await self.summarizer.execute(
+                        **summarizer_input.model_dump()
                     )
+                    self.summary_cache.write(
+                        content_hash,
+                        ticker=metadata.ticker,
+                        filing_type=metadata.formType,
+                        filing_date=metadata.filing_date,
+                        original_text=mega_summaries,
+                        summary=summary,
+                    )
+                else:
+                    summary = cache_entry["summary"]
+
+                node_id = str(uuid.uuid4())
+                root_tree_node = MemoryTreeNode(
+                    id=node_id,
+                    summary=summary,
+                    content="",
+                    node_type=ChunkType.TEXT,
+                    children=children_memories,
                 )
-        return table_tasks
+            self.hierarchy_cache.write(
+                metadata_hash,
+                ticker=metadata.ticker,
+                filing_type=metadata.formType,
+                filing_date=metadata.filing_date,
+                document_structure=root_tree_node.model_dump(),
+            )
+        else:
+            root_tree_node = MemoryTreeNode.model_validate(
+                hierarchy_entry["document_structure"]
+            )
+        write_content_to_file(
+            json.dumps(root_tree_node.model_dump()), f"cache/AAPL.json"
+        )
+        docs = self._create_docs_from_memory_tree(root_tree_node)
+        return docs
+
+    def _create_docs_from_memory_tree(
+        self, memory_tree: MemoryTreeNode
+    ) -> List[Document]:
+        if not memory_tree:
+            return []
+
+        if len(memory_tree.children) == 0:
+            # If it's a leaf node, create a Document object
+            return [
+                Document(
+                    page_content=memory_tree.content,
+                    metadata=memory_tree.metadata.flatten_dict(),
+                )
+            ]
+
+        docs = []
+        for child in memory_tree.children:
+            child_docs = self._create_docs_from_memory_tree(child)
+            docs.extend(child_docs)
+        return docs
+
+    async def _create_document_structure(
+        self, node: sp.TreeNode, metadata: SECFiling
+    ) -> MemoryTreeNode:
+        if not node:
+            return None
+
+        child_tasks = [
+            asyncio.create_task(self._create_document_structure(child, metadata))
+            for child in node.children
+        ]
+        children_memories: List[MemoryTreeNode] = await asyncio.gather(*child_tasks)
+
+        # If there's only one child, we can merge it with the parent node
+        # to avoid unnecessary nesting in the memory tree
+        # This is a simple heuristic and may need to be adjusted based on the actual structure
+        # of the SEC filings.
+        if len(node.children) == 1:
+            child_memory = children_memories[0]
+            child_memory.content = (
+                node.semantic_element.text.strip() + "\n\n" + child_memory.content
+            )
+            return child_memory
+
+        if isinstance(node.semantic_element, sp.TableElement):
+            node_content = self._cleanup_table_format(
+                node.semantic_element.table_to_markdown()
+            ).strip()
+            node_type = ChunkType.TABLE
+        elif isinstance(
+            node.semantic_element, sp.ImageElement
+        ):  # TODO(neelp): Handle images when parsing SEC filings
+            node_content = "[IMAGE]"
+            node_type = ChunkType.IMAGE
+        else:
+            node_content = node.semantic_element.text.strip()
+            node_type = ChunkType.TEXT
+
+        # If it's a leaf node, generate summary of the text
+        if len(node.children) == 0 and node.semantic_element.contains_words():
+            content_hash = self.summary_cache.generate_id(node_content)
+            cache_entry = self.summary_cache.get(content_hash)
+            if not cache_entry or not cache_entry["summary"]:
+                summarizer_input = SummarizerInput(
+                    input=node_content,
+                    custom_instructions="""
+You are a precision-driven AI summarizer designed to process a single atomic section from an SEC filing.
+
+Your task is to:
+- Compress the content without losing factual detail
+- Retain names, dollar amounts, and disclosed entities
+- Preserve the tone (e.g., confident, hedged, vague)
+- Reflect structure if the text is organized with bullets, lists, or subheaders
+- Avoid interpreting meaning beyond what is stated
+
+<rules>
+- DO NOT omit financial figures, dates, named parties, or regulatory references
+- DO NOT generalize (“some policies,” “various risks”) unless that language exists in the source
+- If content is boilerplate or non-informative, note this explicitly
+- If a table is embedded, hand off processing to a specialized table summarizer (see: <table_instructions> tag)
+</rules>
+
+<format>
+Your output should be in bullet-point format. Each bullet should preserve a single fact, clause, or line of disclosure. Use nested bullets only when needed to reflect structure in the original text.
+</format>
+""",
+                )
+                summary = await self.summarizer.execute(**summarizer_input.model_dump())
+                self.summary_cache.write(
+                    content_hash,
+                    ticker=metadata.ticker,
+                    filing_type=metadata.formType,
+                    filing_date=metadata.filing_date,
+                    original_text=node_content,
+                    summary=summary,
+                )
+            else:
+                summary = cache_entry["summary"]
+            node_id = str(uuid.uuid4())
+            # metadata = metadata.model_copy()
+            metadata.chunk_type = node_type
+            metadata.hierarchy = HierarchyMetadata(
+                node_id=node_id,
+            )
+            current_node = MemoryTreeNode(
+                id=node_id,
+                summary=summary,
+                content=node_content,
+                node_type=node_type,
+                metadata=metadata,
+            )
+            return current_node
+
+        mega_summaries = self._construct_summaries(children_memories, node_content)
+        content_hash = self.summary_cache.generate_id(mega_summaries)
+        cache_entry = self.summary_cache.get(content_hash)
+        if not cache_entry or not cache_entry["summary"]:
+            summarizer_input = SummarizerInput(
+                input=mega_summaries,
+            )
+            summary = await self.summarizer.execute(**summarizer_input.model_dump())
+            self.summary_cache.write(
+                content_hash,
+                original_text=mega_summaries,
+                summary=summary,
+                ticker=metadata.ticker,
+                filing_type=metadata.formType,
+                filing_date=metadata.filing_date,
+            )
+        else:
+            summary = cache_entry["summary"]
+
+        node_id = str(uuid.uuid4())
+        current_node = MemoryTreeNode(
+            id=node_id,
+            summary=summary,
+            content=node_content,
+            node_type=node_type,
+            metadata=metadata,
+            children=children_memories,
+        )
+        return current_node
+
+    def _construct_summaries(
+        self, children_memories: List[MemoryTreeNode], node_content: str
+    ) -> str:
+        """
+        Construct summaries for the children nodes and combine them with the parent node content.
+        """
+        mega_summaries = []
+        for child in children_memories:
+            if child.summary:
+                mega_summaries.append(child.summary)
+            else:
+                mega_summaries.append(child.content)
+        return node_content + "\n\n" + "\n---------------\n".join(mega_summaries)
 
     def _cleanup_table_format(self, markdown_lines: str) -> str:
         """
@@ -148,86 +335,16 @@ class SECSplitter(ISplitter):
             markdown_lines.insert(1, separator_line)
         return "\n".join(markdown_lines).strip()
 
-    async def _process_table(self, markdown_lines: str) -> None:
-        """
-        Clean up table formatting in the text.
-
-        Args:
-            text: Text containing table formatting
-        """
-        markdown_table = self._cleanup_table_format(markdown_lines)
-        table_hash = self._md_table_cache.generate_id(markdown_table)
-
-        cache_entry = self._md_table_cache.get(table_hash)
-        if cache_entry and cache_entry["summary"]:
-            return
-
-        if self.table_summarizer is None:
-            logger.debug(
-                f"LLM Provider not specified, proceeding without LLM. Using raw table."
+    async def parse(self, docs: List[Document]) -> List[Document]:
+        parser = sp.Edgar10QParser(self.get_classifer_steps)
+        parsed_docs = []
+        for doc in docs:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Invalid section type for")
+                elements: list = parser.parse(doc.page_content)
+            bldr = sp.TreeBuilder()
+            tree = bldr.build(elements)
+            parsed_docs.extend(
+                await self._convert_tree_to_documents(tree, SECFiling(**doc.metadata))
             )
-            self._md_table_cache.write(table_hash, markdown=markdown_table)
-            return
-
-        summarizer_input = TableSummarizerInput(table=markdown_table)
-        table_summary = await self.table_summarizer.run(**summarizer_input.model_dump())
-        self._md_table_cache.write(
-            table_hash, markdown=markdown_table, summary=table_summary
-        )
-        return
-
-    async def _flatten_tree(
-        self, node: sp.TreeNode, metadata, path=None, level=1
-    ) -> List[Document]:
-        is_leaf_node = len(node.children) == 0
-        path = path or []
-
-        chunks = []
-        if is_leaf_node:
-            if node.semantic_element.contains_words():
-                # If it's a leaf node, create a Document object
-                doc_metadata = metadata.copy()
-                doc_metadata.update(
-                    {
-                        "type": node.semantic_element.__class__.__name__,
-                        "level": level,
-                        "path": " > ".join(path),
-                        "parent": (
-                            node.parent.semantic_element.text.strip()
-                            if node.parent
-                            else ""
-                        ),
-                    }
-                )
-                if isinstance(node.semantic_element, sp.TableElement):
-                    markdown_table = self._cleanup_table_format(
-                        node.semantic_element.table_to_markdown()
-                    )
-
-                    # Retrieve either the table or the summary from the cache
-                    table_hash = self._md_table_cache.generate_id(markdown_table)
-                    cache_entry = self._md_table_cache.get(table_hash)
-                    if cache_entry and cache_entry["summary"]:
-                        content = cache_entry["summary"]
-                    else:
-                        content = markdown_table
-                    doc_metadata.update(
-                        {
-                            "db_table_key": table_hash,
-                            "db_table_name": self._TABLE_SUMMARY_TABLE_NAME,
-                        }
-                    )
-                else:
-                    content = node.semantic_element.text.strip()
-
-                chunk_text = f"You are in section: {' > '.join(path)}. This is a {node.semantic_element.__class__.__name__}.\n\n{content}"
-                chunks.append(Document(page_content=chunk_text, metadata=doc_metadata))
-        else:
-            path = path + [node.semantic_element.text.strip()]
-
-        for child in node.children:
-            # Recursively flatten the child nodes
-            chunks.extend(
-                await self._flatten_tree(child, metadata, path=path, level=level + 1)
-            )
-        return chunks
+        return parsed_docs

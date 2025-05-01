@@ -6,6 +6,7 @@ from typing import Type
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from langchain_text_splitters import MarkdownTextSplitter
 
 from infra.acquisition.models import BaseMetadata
 from infra.acquisition.sec_fetcher import EDGARFetcher
@@ -15,7 +16,7 @@ from infra.ingestion.web_loader import WebLoader
 from infra.llm.providers import OpenAIProvider
 from infra.pipelines.indexing_pipeline import IndexingPipeline
 from infra.preprocessing.sec_parser import SECParser
-from infra.preprocessing.sec_parser import SECSplitter
+from infra.preprocessing.simple_splitters import LangChainTextSplitter
 
 
 class CollectionSchema(BaseModel):
@@ -70,9 +71,8 @@ def get_schema_registry() -> MetadataSchemaRegistry:
                     indexer=IndexingPipeline(
                         fetcher=EDGARFetcher(),
                         loader=WebLoader(crawl_strategy="all", max_crawl_depth=0),
-                        parser=SECParser(),
-                        splitter=SECSplitter(),
-                        llm_provider=OpenAIProvider(),
+                        parser=SECParser(llm_provider=OpenAIProvider()),
+                        splitter=LangChainTextSplitter(splitter=MarkdownTextSplitter),
                     ),
                     indexer_schema=FilingRequest,
                 ),

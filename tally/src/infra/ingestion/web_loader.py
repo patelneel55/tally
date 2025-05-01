@@ -88,10 +88,8 @@ class WebLoader(IDocumentLoader):
             def handle_page(url: str, content: str) -> None:
                 # Process the page content here
                 metadata = src.get_metadata()
-                metadata.source = url
-                documents.append(
-                    Document(page_content=content, metadata=metadata.model_dump())
-                )
+                # metadata.source = url
+                documents.append(Document(page_content=content, metadata=metadata))
 
             return handle_page
 

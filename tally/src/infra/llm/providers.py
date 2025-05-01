@@ -1,9 +1,10 @@
 import logging
 import os
-from typing import Any
+from typing import Any, ClassVar
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_openai import ChatOpenAI
+import tiktoken
 
 from infra.config.settings import get_settings
 from infra.llm.models import ILLMProvider
@@ -13,44 +14,49 @@ from infra.llm.models import OpenAIModels
 logger = logging.getLogger(__name__)
 
 
-class OpenAIProvider(ILLMProvider):
+class OpenAIProvider(ChatOpenAI, ILLMProvider):
+    _model: ClassVar[OpenAIModels] = OpenAIModels.GPT_O4_MINI
+    _max_tokens: ClassVar[int] = 2048
+
     def __init__(
         self,
         api_key: str = None,
-        model: str = OpenAIModels.GPT_4O,
-        temperature: float = 0.7,
-        max_tokens: int = 150,
+        model: OpenAIModels = OpenAIModels.GPT_4O,
+        temperature: float = 1,
+        max_tokens: int = 4096,
         **kwargs: Any,
     ):
-        self.model = model
-        self.api_key = api_key or get_settings().OPENAI_API_KEY
-        if not self.api_key:
+        self._model_enum = model
+        self._api_key = api_key or get_settings().OPENAI_API_KEY
+        if not self._api_key:
             raise ValueError(
                 "OpenAI API Key not provided or found in environment variables."
             )
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.extra_kwargs = kwargs
-        self._llm_instance = None  # Lazy initialization
+        self._temperature = temperature
+        self._extra_kwargs = kwargs
+        self._llm_instance = False  # Lazy initialization
 
-    def _initialize_model(self) -> BaseLanguageModel:
-        """
-        Initialize the OpenAI model with the provided parameters.
-        """
-        logger.debug(f"Initialzing ChatOpenAI instance (model={self.model})...")
-        try:
-            model_kwargs = {
-                "model": self.model,
-                "temperature": self.temperature,
-                **self.extra_kwargs,
-            }
-            model = ChatOpenAI(api_key=self.api_key, **model_kwargs)
-        except Exception as e:
-            logger.error(f"Error initializing OpenAI model: {e}")
-            raise e
-        return model
+        model_kwargs = {
+            "model": model.value,
+            "temperature": self._temperature,
+            "max_completion_tokens": max_tokens,
+            **self._extra_kwargs,
+        }
+        super().__init__(api_key=self._api_key, **model_kwargs)
 
     def get_model(self) -> BaseLanguageModel:
-        if self._llm_instance is None:
-            self._llm_instance = self._initialize_model()
-        return self._llm_instance
+        return self
+
+    def estimate_tokens(self, text: str) -> int:
+        try:
+            enc = tiktoken.encoding_for_model(self._model.value)
+        except KeyError:
+            # Fallback if model isn't recognized by tiktoken
+            enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text)) + self._max_tokens
+
+    async def ainvoke(self, *args, **kwargs) -> Any:
+        estimated_tokens = self.estimate_tokens(str(args[0]))
+        if self._model.rate_limiter:
+            await self._model.rate_limiter.acquire(estimated_tokens)
+        return await super().ainvoke(*args, **kwargs)

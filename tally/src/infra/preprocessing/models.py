@@ -64,7 +64,7 @@ class IParser(ABC):
     """
 
     @abstractmethod
-    def parse(self, docs: List[Document]) -> List[Document]:
+    async def parse(self, docs: List[Document]) -> List[Document]:
         """
         Loads and parses a file from the given path into LangChain Documents.
 

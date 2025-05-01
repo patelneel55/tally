@@ -14,15 +14,10 @@ from typing import Optional
 from typing import Union
 
 from infra.acquisition.models import IDataFetcher
-from infra.acquisition.sec_fetcher import EDGARFetcher
 from infra.embeddings.models import IEmbeddingProvider
 from infra.ingestion.models import IDocumentLoader
-from infra.ingestion.web_loader import WebLoader
-from infra.llm.models import ILLMProvider
 from infra.preprocessing.models import IParser
 from infra.preprocessing.models import ISplitter
-from infra.preprocessing.sec_parser import SECParser
-from infra.preprocessing.sec_parser import SECSplitter
 from infra.vector_stores.models import IVectorStore
 
 
@@ -42,8 +37,8 @@ class IndexingPipeline:
         loader: IDocumentLoader,
         parser: IParser,
         splitter: ISplitter,
-        embedding_provider: IEmbeddingProvider,
-        vector_store: IVectorStore,
+        embedding_provider: Optional[IEmbeddingProvider] = None,
+        vector_store: Optional[IVectorStore] = None,
     ):
         """
         Initialize the indexing pipeline with the necessary components.
@@ -89,7 +84,7 @@ class IndexingPipeline:
             logger.info(f"Loaded {len(docs)} documents")
 
             # Step 3: Parse documents
-            parsed_docs = self.parser.parse(docs)
+            parsed_docs = await self.parser.parse(docs)
             logger.info(f"Parsed into {len(parsed_docs)} documents")
 
             # Step 4: Split documents
