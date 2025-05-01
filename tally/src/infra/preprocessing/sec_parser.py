@@ -21,26 +21,10 @@ from infra.preprocessing.models import IParser
 from infra.tools.summarizer import SummarizerInput, SummarizerTool
 from infra.collections.models import ChunkType, BaseMetadata, HierarchyMetadata
 from infra.acquisition.sec_fetcher import SECFiling
+from infra.pipelines.mem_walker import MemoryTreeNode
 
 
 logger = logging.getLogger(__name__)
-
-
-class MemoryTreeNode(BaseModel):
-    id: str = Field(description="Unique identifier for the node in the memory tree.")
-    summary: str = Field(..., description="Summary of the node's content.")
-    content: str = Field(..., description="Raw content of the node")
-    node_type: ChunkType = Field(
-        default=ChunkType.TEXT, description="Type of the node."
-    )
-    metadata: Optional[BaseMetadata] = Field(
-        default=None, description="Metadata associated with the node."
-    )
-
-    children: Optional[List["MemoryTreeNode"]] = Field(
-        default_factory=list,
-        description="List of child nodes in the memory tree.",
-    )
 
 
 def write_content_to_file(content: str, filename: str) -> None:
