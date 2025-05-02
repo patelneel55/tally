@@ -1,9 +1,7 @@
 """Tests for the EDGARPDFLoader class."""
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
 
-import aiohttp
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from langchain_core.documents import Document
 

@@ -1,9 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document

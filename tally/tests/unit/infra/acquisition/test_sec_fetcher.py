@@ -7,25 +7,23 @@ This module tests the SEC fetcher functionality for retrieving SEC filings.
 
 import json
 import pickle
-from datetime import date
-from datetime import datetime
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import date, datetime
+from unittest.mock import AsyncMock, patch
 
-import aiohttp
 import pytest
 from aiohttp import ClientError
 from pydantic import ValidationError
 
 from infra.acquisition.exceptions import ValidationError as AcquisitionValidationError
 from infra.acquisition.models import DataFormat
-from infra.acquisition.sec_fetcher import DataFetchError
-from infra.acquisition.sec_fetcher import EDGARFetcher
-from infra.acquisition.sec_fetcher import FilingRequest
-from infra.acquisition.sec_fetcher import FilingType
-from infra.acquisition.sec_fetcher import SECFiling
-from infra.acquisition.sec_fetcher import sec_api_query_response_schema
+from infra.acquisition.sec_fetcher import (
+    DataFetchError,
+    EDGARFetcher,
+    FilingRequest,
+    FilingType,
+    SECFiling,
+    sec_api_query_response_schema,
+)
 from infra.collections.models import ChunkType
 
 

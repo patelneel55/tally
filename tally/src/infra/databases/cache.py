@@ -1,25 +1,16 @@
 import hashlib
 import json
 import logging
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
-from typing import Dict
-from typing import Optional
-from typing import Type
+from typing import Any, Dict, Optional, Type
 
 from parse import parse
-from sqlalchemy import DateTime
-from sqlalchemy import UnicodeText
+from sqlalchemy import DateTime, UnicodeText
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, mapped_column, sessionmaker
 
 from infra.config.settings import get_settings
 
@@ -43,9 +34,9 @@ class Cache:
     creation and different value storage types.
     """
 
-    _orm_models: Dict[
-        str, Type[Base]
-    ] = {}  # Class-level cache for generated ORM models
+    _orm_models: Dict[str, Type[Base]] = (
+        {}
+    )  # Class-level cache for generated ORM models
 
     def __init__(self, engine: Engine, table_name: str, column_mapping: Dict = None):
         """
@@ -109,7 +100,7 @@ class Cache:
                 default=lambda o: o.isoformat() if isinstance(o, date) else str(o),
                 sort_keys=True,
             )
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError):
             if isinstance(data, str):
                 serialized_data = data.strip()
             else:
@@ -416,7 +407,7 @@ class Cache:
         try:
             with self._SessionLocal() as session:
                 stmt = self.delete(self._cache_model).where(
-                    self._cache_model.expires_at != None,
+                    self._cache_model.expires_at != None,  # noqa: E711
                     self._cache_model.expires_at <= datetime.now(timezone.utc),
                 )
                 result = session.execute(stmt)

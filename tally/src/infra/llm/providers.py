@@ -1,14 +1,12 @@
 import logging
-import os
 from typing import Any, ClassVar
 
+import tiktoken
 from langchain_core.language_models import BaseLanguageModel
 from langchain_openai import ChatOpenAI
-import tiktoken
 
 from infra.config.settings import get_settings
-from infra.llm.models import ILLMProvider
-from infra.llm.models import OpenAIModels
+from infra.llm.models import ILLMProvider, OpenAIModels
 
 
 logger = logging.getLogger(__name__)

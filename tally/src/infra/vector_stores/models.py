@@ -1,9 +1,5 @@
-from abc import ABC
-from abc import abstractmethod
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings

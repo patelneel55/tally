@@ -1,7 +1,5 @@
-from abc import ABC
-from abc import abstractmethod
-from typing import Any
-from typing import List
+from abc import ABC, abstractmethod
+from typing import Any, List
 
 from infra.tools.models import ITool
 

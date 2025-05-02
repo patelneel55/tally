@@ -1,12 +1,8 @@
 import json
 import logging
-from typing import Any
-from typing import ClassVar
-from typing import Dict
-from typing import Type
+from typing import Any, ClassVar, Dict, Type
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from infra.collections.registry import get_schema_registry
 from infra.embeddings.models import IEmbeddingProvider

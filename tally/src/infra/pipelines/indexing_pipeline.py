@@ -8,16 +8,12 @@ documents in a vector database.
 """
 
 import logging
-import os
-from typing import List
 from typing import Optional
-from typing import Union
 
 from infra.acquisition.models import IDataFetcher
 from infra.embeddings.models import IEmbeddingProvider
 from infra.ingestion.models import IDocumentLoader
-from infra.preprocessing.models import IParser
-from infra.preprocessing.models import ISplitter
+from infra.preprocessing.models import IParser, ISplitter
 from infra.vector_stores.models import IVectorStore
 
 
@@ -72,7 +68,7 @@ class IndexingPipeline:
         Returns:
             List of document chunks that were indexed
         """
-        logger.info(f"Starting indexing pipeline")
+        logger.info("Starting indexing pipeline")
 
         try:
             # Step 1: Fetch filings

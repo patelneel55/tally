@@ -2,8 +2,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 
 from infra.config.settings import get_settings
-from infra.embeddings.models import IEmbeddingProvider
-from infra.embeddings.models import OpenAIEmbeddingModels
+from infra.embeddings.models import IEmbeddingProvider, OpenAIEmbeddingModels
 
 
 class OpenAIEmbeddingProvider(IEmbeddingProvider):

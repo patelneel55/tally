@@ -1,5 +1,4 @@
 from aiolimiter import AsyncLimiter
-import logging
 
 
 class RateLimiter:

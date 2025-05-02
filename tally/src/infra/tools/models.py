@@ -1,7 +1,5 @@
-from abc import ABC
-from abc import abstractmethod
-from typing import Any
-from typing import Type
+from abc import ABC, abstractmethod
+from typing import Any, Type
 
 from langchain.tools import BaseTool
 from pydantic import BaseModel

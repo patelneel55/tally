@@ -17,29 +17,21 @@ import pickle
 from datetime import date as Date
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import aiohttp
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
-from schema import And
-from schema import Or
-from schema import Schema
-from schema import Use
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from schema import And, Or, Schema, Use
 from sqlalchemy import PickleType
 from sqlalchemy.orm import mapped_column
 
-from infra.acquisition.exceptions import DataFetchError
-from infra.acquisition.exceptions import ValidationError
-from infra.acquisition.models import AcquisitionOutput
-from infra.acquisition.models import BaseMetadata
-from infra.acquisition.models import DataFormat
-from infra.acquisition.models import IDataFetcher
+from infra.acquisition.exceptions import DataFetchError, ValidationError
+from infra.acquisition.models import (
+    AcquisitionOutput,
+    BaseMetadata,
+    DataFormat,
+    IDataFetcher,
+)
 from infra.collections.models import ChunkType
 from infra.config.settings import get_settings
 from infra.databases.cache import Cache

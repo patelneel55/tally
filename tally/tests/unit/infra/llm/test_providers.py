@@ -1,10 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from langchain_core.language_models import BaseLanguageModel
 
-from infra.llm.providers import OpenAIProvider
 from infra.llm.models import OpenAIModels
-from infra.config.settings import get_settings
+from infra.llm.providers import OpenAIProvider
 
 
 @pytest.mark.parametrize("mock_settings", ["infra.llm.providers"], indirect=True)
@@ -22,7 +22,7 @@ class TestOpenAIProvider:
     def test_initialization_with_defaults(self, mock_settings, mock_chat_openai):
         """Test initialization with default parameters."""
         provider = OpenAIProvider()
-        
+
         assert provider.model == OpenAIModels.GPT_4O
         assert provider.api_key == "test-api-key"
         assert provider.temperature == 0.7
@@ -37,15 +37,15 @@ class TestOpenAIProvider:
         custom_temp = 0.5
         custom_tokens = 200
         extra_kwargs = {"top_p": 0.9}
-        
+
         provider = OpenAIProvider(
             model=custom_model,
             api_key=custom_api_key,
             temperature=custom_temp,
             max_tokens=custom_tokens,
-            **extra_kwargs
+            **extra_kwargs,
         )
-        
+
         assert provider.model == custom_model
         assert provider.api_key == custom_api_key
         assert provider.temperature == custom_temp
@@ -58,15 +58,18 @@ class TestOpenAIProvider:
             mock_settings = MagicMock()
             mock_settings.OPENAI_API_KEY = None
             mock_get_settings.return_value = mock_settings
-            
-            with pytest.raises(ValueError, match="OpenAI API Key not provided or found in environment variables."):
+
+            with pytest.raises(
+                ValueError,
+                match="OpenAI API Key not provided or found in environment variables.",
+            ):
                 OpenAIProvider()
 
     def test_get_model_initializes_lazily(self, mock_settings, mock_chat_openai):
         """Test that get_model initializes the model lazily."""
         provider = OpenAIProvider()
         assert provider._llm_instance is None
-        
+
         model = provider.get_model()
         assert model == mock_chat_openai.return_value
         mock_chat_openai.assert_called_once_with(
@@ -78,12 +81,12 @@ class TestOpenAIProvider:
     def test_get_model_reuses_instance(self, mock_settings, mock_chat_openai):
         """Test that get_model reuses the initialized instance."""
         provider = OpenAIProvider()
-        
+
         # First call initializes
         model1 = provider.get_model()
         # Second call should reuse
         model2 = provider.get_model()
-        
+
         assert model1 == model2
         # ChatOpenAI should only be called once
         mock_chat_openai.assert_called_once()
@@ -92,6 +95,6 @@ class TestOpenAIProvider:
         """Test error handling in _initialize_model."""
         mock_chat_openai.side_effect = Exception("Test error")
         provider = OpenAIProvider()
-        
+
         with pytest.raises(Exception, match="Test error"):
             provider.get_model()

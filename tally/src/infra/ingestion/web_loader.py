@@ -1,18 +1,17 @@
 import logging
 import pickle
 from enum import Enum
-from typing import Callable
-from typing import List
+from typing import Callable, List
 
 from crawlee import ConcurrencySettings
-from crawlee.crawlers import PlaywrightCrawler
-from crawlee.crawlers import PlaywrightCrawlingContext
-from crawlee.crawlers import PlaywrightPreNavCrawlingContext
+from crawlee.crawlers import (
+    PlaywrightCrawler,
+    PlaywrightCrawlingContext,
+    PlaywrightPreNavCrawlingContext,
+)
 from langchain_core.documents import Document
 from pydantic import BaseModel
-from sqlalchemy import Integer
-from sqlalchemy import PickleType
-from sqlalchemy import UnicodeText
+from sqlalchemy import Integer, PickleType, UnicodeText
 from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.models import AcquisitionOutput

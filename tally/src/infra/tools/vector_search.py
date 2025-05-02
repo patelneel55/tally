@@ -1,12 +1,8 @@
 import logging
-from typing import Any
-from typing import ClassVar
-from typing import Dict
-from typing import List
+from typing import Any, ClassVar, Dict, List
 
 from langchain_core.documents import Document
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from infra.embeddings.models import IEmbeddingProvider
 from infra.tools.models import BaseTool

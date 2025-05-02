@@ -3,8 +3,7 @@ import math
 from typing import ClassVar
 
 import numexpr
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from infra.tools.models import BaseTool
 

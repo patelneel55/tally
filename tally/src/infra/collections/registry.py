@@ -1,17 +1,11 @@
 import json
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Type
+from typing import Dict, List, Optional, Type
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
 from langchain_text_splitters import MarkdownTextSplitter
+from pydantic import BaseModel, ConfigDict
 
 from infra.acquisition.models import BaseMetadata
-from infra.acquisition.sec_fetcher import EDGARFetcher
-from infra.acquisition.sec_fetcher import FilingRequest
-from infra.acquisition.sec_fetcher import SECFiling
+from infra.acquisition.sec_fetcher import EDGARFetcher, FilingRequest, SECFiling
 from infra.ingestion.web_loader import WebLoader
 from infra.llm.providers import OpenAIProvider
 from infra.pipelines.indexing_pipeline import IndexingPipeline

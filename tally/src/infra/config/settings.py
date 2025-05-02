@@ -4,8 +4,7 @@ like environment variables, .env files, and YAML configuration files.
 """
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
-from pydantic_settings import SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -57,7 +56,6 @@ class Settings(BaseSettings):
         "https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT"
     )
     LANGSMITH_PROJECT: str = Field(..., alias="LANGSMITH_PROJECT")
-
 
 
 _settings_instance: Settings | None = None

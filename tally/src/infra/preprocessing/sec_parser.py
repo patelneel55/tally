@@ -1,27 +1,26 @@
+import asyncio
+import json
 import logging
 import re
-import warnings
-from typing import List, Optional
-import json
-
-import asyncio
 import uuid
-import sec_parser as sp
-from sec_parser.processing_steps import SupplementaryTextClassifier
-from infra.llm.models import ILLMProvider
-from langchain_core.documents import Document
-from sqlalchemy import UnicodeText, JSON, DateTime
-from sqlalchemy.orm import mapped_column
+import warnings
 from pathlib import Path
-from pydantic import BaseModel, Field
+from typing import List
 
+import sec_parser as sp
+from langchain_core.documents import Document
+from sec_parser.processing_steps import SupplementaryTextClassifier
+from sqlalchemy import JSON, DateTime, UnicodeText
+from sqlalchemy.orm import mapped_column
+
+from infra.acquisition.sec_fetcher import SECFiling
+from infra.collections.models import BaseMetadata, ChunkType, HierarchyMetadata
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
+from infra.llm.models import ILLMProvider
+from infra.pipelines.mem_walker import MemoryTreeNode
 from infra.preprocessing.models import IParser
 from infra.tools.summarizer import SummarizerInput, SummarizerTool
-from infra.collections.models import ChunkType, BaseMetadata, HierarchyMetadata
-from infra.acquisition.sec_fetcher import SECFiling
-from infra.pipelines.mem_walker import MemoryTreeNode
 
 
 logger = logging.getLogger(__name__)
@@ -145,7 +144,7 @@ class SECParser(IParser):
                 hierarchy_entry["document_structure"]
             )
         write_content_to_file(
-            json.dumps(root_tree_node.model_dump()), f"cache/AAPL.json"
+            json.dumps(root_tree_node.model_dump()), "cache/AAPL.json"
         )
         docs = self._create_docs_from_memory_tree(root_tree_node)
         return docs

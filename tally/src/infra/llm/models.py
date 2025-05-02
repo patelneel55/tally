@@ -1,10 +1,7 @@
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List
 
 from aiolimiter import AsyncLimiter
-
 from langchain_core.language_models import BaseLanguageModel
 
 from infra.config.rate_limiter import RateLimiter

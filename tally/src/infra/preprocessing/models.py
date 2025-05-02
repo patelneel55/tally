@@ -1,13 +1,9 @@
-from abc import ABC
-from abc import abstractmethod
-from typing import Iterator
-from typing import List
-from typing import Literal
+from abc import ABC, abstractmethod
+from typing import Iterator, List
 
 from langchain_core.documents import Document
 from pydantic import PrivateAttr
-from sec_parser import SemanticTree
-from sec_parser import TreeNode
+from sec_parser import SemanticTree, TreeNode
 
 
 class SemanticDocument(SemanticTree, Document):

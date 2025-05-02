@@ -1,4 +1,5 @@
 """Sphinx configuration."""
+
 project = "Tally"
 author = "Neel Patel"
 copyright = "2025, Neel Patel"

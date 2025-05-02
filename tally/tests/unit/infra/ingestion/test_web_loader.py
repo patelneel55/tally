@@ -1,8 +1,6 @@
 import pytest
 
-from infra.ingestion.web_loader import CrawlConfig
-from infra.ingestion.web_loader import CrawlStrategy
-from infra.ingestion.web_loader import WebLoader
+from infra.ingestion.web_loader import CrawlConfig, CrawlStrategy, WebLoader
 
 
 @pytest.mark.parametrize(

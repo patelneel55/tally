@@ -7,9 +7,7 @@ and ReAct prompting for reasoning through complex tasks.
 """
 
 import logging
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 
 from langchain.prompts import SystemMessagePromptTemplate
 from langgraph.prebuilt import create_react_agent

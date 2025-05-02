@@ -1,13 +1,6 @@
 import logging
-from datetime import date
-from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Union
-from typing import get_args
-from typing import get_origin
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 from uuid import UUID
 
 import weaviate
@@ -18,8 +11,7 @@ from langchain_core.vectorstores import VectorStore
 from langchain_weaviate.vectorstores import WeaviateVectorStore as LCWeaviate
 from pydantic import BaseModel
 from weaviate import WeaviateClient
-from weaviate.classes.config import DataType
-from weaviate.classes.config import Property
+from weaviate.classes.config import DataType, Property
 
 from infra.config.settings import get_settings
 from infra.vector_stores.models import IVectorStore
@@ -53,7 +45,7 @@ class WeaviateVectorStore(IVectorStore):
 
     def _get_client(self) -> WeaviateClient:
         if self._client is None:
-            logger.info(f"Initializing Weaviate client...")
+            logger.info("Initializing Weaviate client...")
             self._client = weaviate.connect_to_custom(
                 http_host=get_settings().WEAVIATE_HTTP_URL,
                 grpc_host=get_settings().WEAVIATE_GRPC_URL,

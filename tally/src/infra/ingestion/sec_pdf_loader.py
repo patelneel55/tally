@@ -1,10 +1,5 @@
-import asyncio
 import logging
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Union
+from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 from langchain_core.documents import Document

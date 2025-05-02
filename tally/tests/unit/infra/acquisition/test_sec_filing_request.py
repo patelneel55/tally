@@ -4,8 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from infra.acquisition.models import DataFormat
-from infra.acquisition.sec_fetcher import FilingRequest
-from infra.acquisition.sec_fetcher import FilingType
+from infra.acquisition.sec_fetcher import FilingRequest, FilingType
 
 
 class TestFilingRequest:
