@@ -5,7 +5,7 @@ import re
 import uuid
 import warnings
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import sec_parser as sp
 from langchain_core.documents import Document
@@ -124,9 +124,8 @@ class SECParser(IParser):
                 else:
                     summary = cache_entry["summary"]
 
-                node_id = str(uuid.uuid4())
                 root_tree_node = MemoryTreeNode(
-                    id=node_id,
+                    id=str(uuid.uuid4()),
                     summary=summary,
                     content="",
                     node_type=ChunkType.TEXT,
@@ -172,15 +171,24 @@ class SECParser(IParser):
 
     async def _create_document_structure(
         self, node: sp.TreeNode, metadata: SECFiling
-    ) -> MemoryTreeNode:
+    ) -> Tuple[MemoryTreeNode, str]:
         if not node:
-            return None
+            return None, ""
 
-        child_tasks = [
-            asyncio.create_task(self._create_document_structure(child, metadata))
-            for child in node.children
-        ]
-        children_memories: List[MemoryTreeNode] = await asyncio.gather(*child_tasks)
+        children_memories: List[MemoryTreeNode] = []
+        total_content: List[str] = []
+        for child in node.children:
+            child_mem, child_content = await self._create_document_structure(
+                child, metadata
+            )
+            children_memories.append(child_mem)
+            total_content.append(child_content)
+
+        # child_tasks = [
+        #     asyncio.create_task(self._create_document_structure(child, metadata))
+        #     for child in node.children
+        # ]
+        # children_memories: List[MemoryTreeNode] = await asyncio.gather(*child_tasks)
 
         # If there's only one child, we can merge it with the parent node
         # to avoid unnecessary nesting in the memory tree
@@ -191,7 +199,7 @@ class SECParser(IParser):
             child_memory.content = (
                 node.semantic_element.text.strip() + "\n\n" + child_memory.content
             )
-            return child_memory
+            return child_memory, child_memory.content
 
         if isinstance(node.semantic_element, sp.TableElement):
             node_content = self._cleanup_table_format(
@@ -207,6 +215,11 @@ class SECParser(IParser):
             node_content = node.semantic_element.text.strip()
             node_type = ChunkType.TEXT
 
+        node_metadata = metadata.model_copy(deep=True)
+        node_id = str(uuid.uuid4())
+        node_metadata.hierarchy = HierarchyMetadata(node_id=node_id)
+        node_metadata.chunk_type = node_type
+
         # If it's a leaf node, generate summary of the text
         if len(node.children) == 0 and node.semantic_element.contains_words():
             content_hash = self.summary_cache.generate_id(node_content)
@@ -214,27 +227,6 @@ class SECParser(IParser):
             if not cache_entry or not cache_entry["summary"]:
                 summarizer_input = SummarizerInput(
                     input=node_content,
-                    custom_instructions="""
-You are a precision-driven AI summarizer designed to process a single atomic section from an SEC filing.
-
-Your task is to:
-- Compress the content without losing factual detail
-- Retain names, dollar amounts, and disclosed entities
-- Preserve the tone (e.g., confident, hedged, vague)
-- Reflect structure if the text is organized with bullets, lists, or subheaders
-- Avoid interpreting meaning beyond what is stated
-
-<rules>
-- DO NOT omit financial figures, dates, named parties, or regulatory references
-- DO NOT generalize (“some policies,” “various risks”) unless that language exists in the source
-- If content is boilerplate or non-informative, note this explicitly
-- If a table is embedded, hand off processing to a specialized table summarizer (see: <table_instructions> tag)
-</rules>
-
-<format>
-Your output should be in bullet-point format. Each bullet should preserve a single fact, clause, or line of disclosure. Use nested bullets only when needed to reflect structure in the original text.
-</format>
-""",
                 )
                 summary = await self.summarizer.execute(**summarizer_input.model_dump())
                 self.summary_cache.write(
@@ -247,22 +239,16 @@ Your output should be in bullet-point format. Each bullet should preserve a sing
                 )
             else:
                 summary = cache_entry["summary"]
-            node_id = str(uuid.uuid4())
-            # metadata = metadata.model_copy()
-            metadata.chunk_type = node_type
-            metadata.hierarchy = HierarchyMetadata(
-                node_id=node_id,
-            )
             current_node = MemoryTreeNode(
                 id=node_id,
                 summary=summary,
                 content=node_content,
                 node_type=node_type,
-                metadata=metadata,
+                metadata=node_metadata,
             )
-            return current_node
+            return current_node, node_content
 
-        mega_summaries = self._construct_summaries(children_memories, node_content)
+        mega_summaries = self._construct_summaries(total_content, node_content)
         content_hash = self.summary_cache.generate_id(mega_summaries)
         cache_entry = self.summary_cache.get(content_hash)
         if not cache_entry or not cache_entry["summary"]:
@@ -287,24 +273,26 @@ Your output should be in bullet-point format. Each bullet should preserve a sing
             summary=summary,
             content=node_content,
             node_type=node_type,
-            metadata=metadata,
+            metadata=node_metadata,
             children=children_memories,
         )
-        return current_node
+        return current_node, mega_summaries
 
     def _construct_summaries(
-        self, children_memories: List[MemoryTreeNode], node_content: str
+        self, children_memories: List[str], node_content: str
     ) -> str:
         """
         Construct summaries for the children nodes and combine them with the parent node content.
         """
         mega_summaries = []
         for child in children_memories:
-            if child.summary:
-                mega_summaries.append(child.summary)
-            else:
-                mega_summaries.append(child.content)
-        return node_content + "\n\n" + "\n---------------\n".join(mega_summaries)
+            mega_summaries.append(child)
+        return (
+            "\n---------------\n"
+            + node_content
+            + "\n\n"
+            + "\n---------------\n".join(mega_summaries)
+        )
 
     def _cleanup_table_format(self, markdown_lines: str) -> str:
         """

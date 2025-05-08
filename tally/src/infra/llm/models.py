@@ -48,7 +48,6 @@ class OpenAIModels(str, Enum):
         "gpt-4o",
         RateLimiter(
             request_limiters=[
-                AsyncLimiter(10, 1),  # 10 requests per second
                 AsyncLimiter(500, 60),  # 500 requests per minute
             ],
             token_limiters=[
@@ -60,7 +59,6 @@ class OpenAIModels(str, Enum):
         "o4-mini",
         RateLimiter(
             request_limiters=[
-                AsyncLimiter(10, 1),  # 10 requests per second
                 AsyncLimiter(500, 60),  # 500 requests per minute
             ],
             token_limiters=[

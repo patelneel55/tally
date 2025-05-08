@@ -52,7 +52,7 @@ class DecisionType(str, Enum):
 class NavigationDecision(BaseModel):
     decision: DecisionType = Field(..., description="Decision made by the LLM.")
     reasoning: str = Field(
-        default="No reasoning provided.",
+        None,
         description="Reasoning behind the decision made by the LLM.",
     )
     next_children_ids: Optional[List[str]] = Field(
@@ -61,9 +61,7 @@ class NavigationDecision(BaseModel):
     )
     confidence: float = Field(
         ...,
-        description="Confidence level of the decision made by the LLM.",
-        ge=0.0,
-        le=1.0,
+        description="Confidence level of the decision made by the LLM. Must be between 0.0 and 1.0",
     )
 
 
@@ -120,10 +118,12 @@ Your task is to analyze the current node and its children, then decide the next 
 
 **Your Task:**
 Based on the overall user query, the content of the current node, and the summaries of its children (if any), you must make a navigation decision.
+IMPORTANT: You are navigating a financial document like 10-K, 10-Q etc. Any decision you make should consider the overall structure of a financial document and
+think about where the data to answer the user's query can lie when reasoning about possible decisions.
 
 **Decision Options:**
 1.  **`explore_children`**: If the current node is relevant but not specific enough, or if its children seem more promising to answer the query. This option is not valid if there are no children.
-2.  **`answer_here`**: If the content of the **current node** directly and sufficiently answers the overall user query.
+2.  **`answer_here`**: ONLY if the **current node** has no children. If the content of the **current node** directly and sufficiently answers the overall user query and the **current node** has no children, else it should explore the relevant child.
 3.  **`deadend`**: If the current node and its children are not relevant to the query, and this path should be abandoned.
 
 **Output Requirements:**
@@ -133,14 +133,16 @@ You MUST provide your response as a JSON object that strictly conforms to the fo
 {{
   "decision": "DecisionType (must be one of 'explore_children', 'answer_here', 'deadend')",
   "reasoning": "Your detailed reasoning for choosing this decision, explaining how the current node's content and children (if any) relate to the overall user query.",
-  "next_children_ids": ["Optional list of child node IDs to explore next. This field is ONLY required and should ONLY be populated if your decision is 'explore_children'. In that case, list the IDs of the children you deem most relevant to explore further. If the decision is not 'explore_children', this field should be null or an empty list."],
+  "next_children_ids": ["Optional list of the whole child node IDs to explore next. This field is ONLY required and should ONLY be populated if your decision is 'explore_children'. In that case, list the IDs of the children you deem most relevant to explore further. If the decision is not 'explore_children', this field should be null or an empty list."],
   "confidence": "A float value between 0.0 and 1.0 representing your confidence in this decision. For example, 0.95 for high confidence."
 }}
 
 Guidelines for Decision Making:
-- Relevance: Always prioritize paths and information most relevant to the overall user query.
+- Relevance: Always prioritize paths and information most relevant to the user query.
 - Specificity: If `explore_children` is chosen, select only the children IDs that are most likely to lead to the answer.
-- Sufficiency for `answer_here`: Only choose `answer_here` if the current node's content itself is sufficient.
+- Sufficiency for `answer_here`: Only choose `answer_here` if the current node's content itself is sufficient to answer either the whole query or part of the query and the current node has no children, else continue exploring children
+- Sufficiency for `deadend`: Before answering `deadend`, make sure that the node has no relevance to the query. Even if the node partially answers the query or if there's even a slight chance that one of the children can answer the question partially. It should explore the children or use it as the answer. If the query had to be relevant to any of the children, and you had to pick a child, pick one as long as confidence is above 0.0
+- Relevance for `deadend`: Before answering `deadend`, think about what kind of document this is. If you think the user's query can be partially answered in such a document and there is chance that the children have the answer, NEVER make the decision of a `deadend`. It's CHEAPER to navigate the children if the decision is wrong rather than saying `deadend` and in actuality the children have the answer. It will lead to CATASTROPHE if you pick `deadend` too early. So be absolutely certain!
 - Reasoning is Key: Your `reasoning` should clearly justify your `decision`.
 - Confidence: Reflect your certainty in the decision.
 """
@@ -150,10 +152,6 @@ Guidelines for Decision Making:
 
 **Current Traversal Context:**
 * **Current Node ID:** {current_node_id}
-* **Current Node Content:**
-    ```
-    {current_node_content}
-    ```
 * **Current Node Summary:**
     ```
     {current_node_summary}
@@ -170,6 +168,10 @@ Guidelines for Decision Making:
   ...
 ])
 If there are no children, provided an empty list `[]`.
+
+<custom_instructions>
+{custom_instructions}
+</custom_instructions>
 
 Based on the system instructions, the overall user query, and the current context provided above, please analyze the information and provide your navigation decision in the specified JSON format.
 """
@@ -188,43 +190,101 @@ Based on the system instructions, the overall user query, and the current contex
             ]
         )
 
-    async def navigate_tree(self, query: str, root_node: MemoryTreeNode) -> Output:
-        """
-        Performs MemWalker navigation on the document tree.
-        Returns a list of context snippets associated with the query
-        """
-        collected_context: List[SummaryContext] = []
-        navigation_log: List[NavigationLogStep] = []
-        visited_nodes: Set[MemoryTreeNode] = set()
-        llm_calls = 0
+    async def _navigate_recurse(
+        self,
+        query: str,
+        current_node: MemoryTreeNode,
+        visited_nodes: Set[MemoryTreeNode] = None,
+        llm_calls: int = 0,
+    ) -> Output:
+        if visited_nodes is None:
+            visited_nodes = set()
+        if llm_calls >= self.max_llm_calls or current_node in visited_nodes:
+            logger.info(f"Node {current_node.id} already visited. Skipping.")
+            return Output()
+        visited_nodes.add(current_node)
+        child_summaries = self._get_child_summaries(current_node)
 
-        stack: List[MemoryTreeNode] = [root_node]
+        logger.info(f"Retrieved child summaries for node {current_node.id}")
+        decision = await self.make_navigation_decision(
+            query=query,
+            current_node=current_node,
+            child_summaries=child_summaries,
+        )
+        logger.info(f"LLM decision at node {current_node.id}: {decision.decision}")
 
-        while stack and llm_calls < self.max_llm_calls:
-            current_node = stack.pop()
-            if current_node in visited_nodes:
-                continue
-            visited_nodes.add(current_node)
+        llm_calls += 1
+        step = 1
+        output = Output(
+            navigation_log=[
+                NavigationLogStep(
+                    step=step,
+                    visited_node_id=current_node.id,
+                    visited_node_summary=current_node.summary,
+                    llm_decision=decision,
+                )
+            ]
+        )
+        visited_children = []
 
-            child_summaries = self._get_child_summaries(current_node)
-            decision = await self.make_navigation_decision(
-                query=query,
-                current_node=current_node,
-                child_summaries=child_summaries,
+        async def _decision_branch(decision: NavigationDecision):
+            nonlocal step
+            nonlocal llm_calls
+            logger.info(
+                f"Processing decision {decision.decision} at node {current_node.id}"
             )
-            llm_calls += 1
             if decision.decision == DecisionType.ExploreChildren:
-                action_log_children = []
                 # Add child nodes to the stack for further exploration
                 if decision.next_children_ids:
-                    for child_id in reversed(decision.next_children_ids):
+                    visited_children.extend(decision.next_children_ids)
+                    logger.info(
+                        f"Exploring children {decision.next_children_ids} from node {current_node.id}"
+                    )
+                    for child_id in decision.next_children_ids:
                         child_node = self._get_child_by_id(current_node, child_id)
                         if child_node and child_node not in visited_nodes:
-                            stack.append(child_node)
-                            action_log_children.append(child_node.id)
+                            logger.info(f"Recursing into child node {child_id}")
+                            child_output = await self._navigate_recurse(
+                                query, child_node, visited_nodes, llm_calls
+                            )
+                            output.collected_context.extend(
+                                child_output.collected_context
+                            )
+                            output.navigation_log.extend(child_output.navigation_log)
+
+                if len(output.collected_context) == 0:
+                    logger.warning(
+                        f"No context gathered from children of node {current_node.id}, retrying with updated decision."
+                    )
+                    new_decision = await self.make_navigation_decision(
+                        query=query,
+                        current_node=current_node,
+                        child_summaries=child_summaries,
+                        custom_instructions="""
+The following chosen children IDs do not have the information to answer the user's query. Do NOT pick the same IDs again and those IDs are not valid anymore, since picking them again can lead to catastrophe. Make the decision again:
+```
+{children_ids}
+```
+""".format(
+                            children_ids=visited_children
+                        ),
+                    )
+                    step += 1
+                    llm_calls += 1
+                    output.navigation_log.append(
+                        NavigationLogStep(
+                            step=step,
+                            visited_node_id=current_node.id,
+                            visited_node_summary=current_node.summary,
+                            llm_decision=new_decision,
+                        )
+                    )
+                    await _decision_branch(new_decision)
+
             elif decision.decision == DecisionType.AnswerHere:
+                logger.info(f"Answer found at node {current_node.id}")
                 # Collect the current node's content
-                collected_context.append(
+                output.collected_context.append(
                     SummaryContext(
                         node_id=current_node.id,
                         summary_text=current_node.summary,
@@ -234,30 +294,89 @@ Based on the system instructions, the overall user query, and the current contex
                 )
             elif decision.decision == DecisionType.DeadEnd:
                 # If its a deadend, we should backtrack
-                pass
+                logger.info(f"Dead end encountered at node {current_node.id}")
             else:
                 logger.warning(f"Unknown decision from LLM: {decision.decision}")
 
-            navigation_log.append(
-                NavigationLogStep(
-                    step=len(navigation_log) + 1,
-                    visited_node_id=current_node.id,
-                    visited_node_summary=current_node.summary,
-                    llm_decision=decision,
-                )
-            )
+        await _decision_branch(decision)
 
-        return Output(
-            collected_context=collected_context,
-            navigation_log=navigation_log,
-        )
+        return output
 
-    def _get_child_summaries(self, parent_node: MemoryTreeNode) -> Dict[str, str]:
-        child_summaries_map = {}
+    async def navigate_tree(self, query: str, root_node: MemoryTreeNode) -> Output:
+        """
+        Performs MemWalker navigation on the document tree.
+        Returns a list of context snippets associated with the query
+        """
+        return await self._navigate_recurse(query, root_node)
+        # collected_context: List[SummaryContext] = []
+        # navigation_log: List[NavigationLogStep] = []
+        # visited_nodes: Set[MemoryTreeNode] = set()
+        # llm_calls = 0
+
+        # stack: List[MemoryTreeNode] = [root_node]
+
+        # while stack and llm_calls < self.max_llm_calls:
+        #     current_node = stack.pop()
+        #     if current_node in visited_nodes:
+        #         continue
+        #     visited_nodes.add(current_node)
+
+        #     child_summaries = self._get_child_summaries(current_node)
+        #     decision = await self.make_navigation_decision(
+        #         query=query,
+        #         current_node=current_node,
+        #         child_summaries=child_summaries,
+        #     )
+        #     llm_calls += 1
+        #     if decision.decision == DecisionType.ExploreChildren:
+        #         action_log_children = []
+        #         # Add child nodes to the stack for further exploration
+        #         if decision.next_children_ids:
+        #             for child_id in reversed(decision.next_children_ids):
+        #                 child_node = self._get_child_by_id(current_node, child_id)
+        #                 if child_node and child_node not in visited_nodes:
+        #                     stack.append(child_node)
+        #                     action_log_children.append(child_node.id)
+        #     elif decision.decision == DecisionType.AnswerHere:
+        #         # Collect the current node's content
+        #         collected_context.append(
+        #             SummaryContext(
+        #                 node_id=current_node.id,
+        #                 summary_text=current_node.summary,
+        #                 reasoning=decision.reasoning,
+        #                 confidence=decision.confidence,
+        #             )
+        #         )
+        #     elif decision.decision == DecisionType.DeadEnd:
+        #         # If its a deadend, we should backtrack
+        #         pass
+        #     else:
+        #         logger.warning(f"Unknown decision from LLM: {decision.decision}")
+
+        #     navigation_log.append(
+        #         NavigationLogStep(
+        #             step=len(navigation_log) + 1,
+        #             visited_node_id=current_node.id,
+        #             visited_node_summary=current_node.summary,
+        #             llm_decision=decision,
+        #         )
+        #     )
+
+        # return Output(
+        #     collected_context=collected_context,
+        #     navigation_log=navigation_log,
+        # )
+
+    def _get_child_summaries(self, parent_node: MemoryTreeNode) -> List[Dict[str, str]]:
+        child_summaries_map = []
         for child in parent_node.children:
             if child:
-                child_summaries_map["id"] = child.id
-                child_summaries_map["summary"] = child.summary
+                child_summaries_map.append(
+                    {
+                        "id": child.id,
+                        "summary": child.summary,
+                    }
+                )
         return child_summaries_map
 
     def _get_child_by_id(
@@ -282,15 +401,16 @@ Based on the system instructions, the overall user query, and the current contex
         self,
         query: str,
         current_node: MemoryTreeNode,
-        child_summaries: Dict[str, str],
+        child_summaries: List[Dict[str, str]],
+        custom_instructions: str = "",
     ) -> NavigationDecision:
         llm = self._llm().with_structured_output(NavigationDecision)
         prompt = self.prompt_template.format_prompt(
             query=query,
             current_node_id=current_node.id,
-            current_node_content=current_node.content,
             current_node_summary=current_node.summary,
             children_info=json.dumps(child_summaries),
+            custom_instructions=custom_instructions,
         )
         response: NavigationDecision = await llm.ainvoke(prompt)
         return response

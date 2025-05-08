@@ -38,12 +38,14 @@ class SummarizerTool(BaseTool):
     _TOOL_DESCRIPTION: ClassVar[str] = "Summarizes text"
 
     _TABLE_SUMMARIZER_PROMPT = """
-You are a semantic indexing agent responsible for generating a high-fidelity roll-up of child node summaries in an SEC filing.
+You are an expert financial analyst tasked with summarizing sections of SEC filings.
+Your goal is to create a concise yet comprehensive summary of the following text provided in the <input_query> tag.
+The summary should capture key facts, figures and GIST of the information presented.
+It will be used by another AI agent to understand the content of this segment and decide if its relevant to a user's query.
+Focus on the factual information and avoid interpretation or inference beyond what is stated.
 
 <rules>
-- DO NOT omit specific values, names, or disclosures.
-- DO NOT generalize lists or collapse structured formats.
-- If the input is a table, solely follow the instructions using the <table_instructions> tag and ignore other rules apart from the <custom_instructions> tag if provided.
+- If the input has a table, solely follow the instructions using the <table_instructions> tag for the table and ignore other rules apart from the <custom_instructions> tag if provided.
 - If custom instructions are provided using the <custom_instructions> tag, ignore all other rules and follow the custom instructions.
 </rules>
 
@@ -85,23 +87,12 @@ Do not compress or analyze. Your job is to faithfully summarize the content and 
 
 
 <task>
-Your job is to accurately reflect what topics and disclosures appear in the children — without summarizing, interpreting, or synthesizing them. This index helps downstream systems decide where to search for relevant information.
+Your job is to accurately reflect what topics and disclosures appear in the children. This index helps downstream systems decide where to search for relevant information.
 
-You must:
-- Enumerate what topics or disclosures are present across child summaries
-- Preserve exact language (e.g., “stock-based compensation,” “cybersecurity insurance”) instead of abstracting into themes
-- Mention all named entities, financial instruments, accounting topics, timeframes, regulations, or risks that appear
-- Flag repeated patterns or vagueness if children are boilerplate
-- Avoid interpreting, generalizing, or drawing conclusions
-
+You are summarizing real financial document content, not intermediate outputs
+Your job is faithful representation, not abstraction
+Think like an indexing layer—downstream tools will rely on this node to decide whether to go deeper or collect here
 </task>
-
-<output_structure>
-- **Topics Contained Across Children**
-- **Named Entities or Instruments**
-- **Explicit Risks or Policies Mentioned**
-- **Boilerplate/Vague Patterns Noted** (optional)
-</output_structure>
 
 <input_query>
 {input}
@@ -110,44 +101,7 @@ You must:
 <custom_instructions>
 {custom_instructions}
 </custom_instructions>
-
-DO NOT analyze or compress. DO NOT combine multiple topics into broader categories. DO NOT omit low-frequency content if it exists in any child. Think of this as a semantic table of contents, not a digest.
 """
-    #     _TABLE_SUMMARIZER_PROMPT = """
-    # You are Polaris, an autonomous financial summarization agent built to support semantic search and AI reasoning pipelines.
-    # You operate with high initiative and are expected to make smart, opinionated decisions about what content matters most.
-
-    # Your task is to transform raw financial text (e.g., 10-Ks, earnings calls, investor letters) into dense,
-    # information-rich summaries that capture not just what's said, but what matters. The input query is provided in the <input_query> tag.
-
-    # <core_directives>
-    # - Use judgment to:
-    #   - Infer topic groupings and structure the summary accordingly (e.g., Key Themes, Repeated Risks, Strategic Signals).
-    #   - Highlight what appears frequently or seems central to the narrative — even if not explicitly labeled.
-    #   - Emphasize causal or directional language (e.g., “as a result,” “will likely,” “due to”) to extract signal.
-    # - If the text is noisy, you may remove irrelevancies or reframe the content for better utility in search.
-    # - You may include meta-observations such as evasiveness, vagueness, or emphasis patterns.
-    # - If there are custom instructions provided using the <custom_instructions> tag, they should be followed and should take precedence over the core directives.
-    # </core_directives>
-
-    # <rules>
-    # - Do not hallucinate or introduce facts not in the text.
-    # - Do not mirror repetition literally; instead, weight it thematically.
-    # - Do not simplify complex statements into vague paraphrases — preserve nuance.
-    # - Use bullet points or short sections, not paragraphs, for clarity.
-    # - Output should be machine-optimized, not human-optimized.
-    # </rules>
-
-    # <custom_instructions>
-    # {custom_instructions}
-    # </custom_instructions>
-
-    # <input_query>
-    # {input}
-    # </input_query>
-
-    # Your summary should be structured, search-powerful, and analytical. Think like an equity analyst compressing the brief for a knowledge graph, not a human reader.
-    # """
 
     def __init__(self, llm_provider: ILLMProvider, prompt=None):
         """

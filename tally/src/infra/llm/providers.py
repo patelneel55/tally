@@ -13,34 +13,31 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIProvider(ChatOpenAI, ILLMProvider):
-    _model: ClassVar[OpenAIModels] = OpenAIModels.GPT_O4_MINI
-    _max_tokens: ClassVar[int] = 2048
-
     def __init__(
         self,
         api_key: str = None,
-        model: OpenAIModels = OpenAIModels.GPT_4O,
+        model: OpenAIModels = OpenAIModels.GPT_O4_MINI,
         temperature: float = 1,
         max_tokens: int = 4096,
         **kwargs: Any,
     ):
-        self._model_enum = model
         self._api_key = api_key or get_settings().OPENAI_API_KEY
         if not self._api_key:
             raise ValueError(
                 "OpenAI API Key not provided or found in environment variables."
             )
-        self._temperature = temperature
-        self._extra_kwargs = kwargs
-        self._llm_instance = False  # Lazy initialization
-
         model_kwargs = {
             "model": model.value,
-            "temperature": self._temperature,
+            "temperature": temperature,
             "max_completion_tokens": max_tokens,
-            **self._extra_kwargs,
+            **kwargs,
         }
         super().__init__(api_key=self._api_key, **model_kwargs)
+
+        # These must come after super().__init__ because parent Pydantic will
+        # overwrite them
+        self._model = model
+        self._max_tokens = max_tokens
 
     def get_model(self) -> BaseLanguageModel:
         return self
@@ -54,7 +51,7 @@ class OpenAIProvider(ChatOpenAI, ILLMProvider):
         return len(enc.encode(text)) + self._max_tokens
 
     async def ainvoke(self, *args, **kwargs) -> Any:
-        estimated_tokens = self.estimate_tokens(str(args[0]))
-        if self._model.rate_limiter:
-            await self._model.rate_limiter.acquire(estimated_tokens)
+        # estimated_tokens = self.estimate_tokens(str(args[0]))
+        # if self._model.rate_limiter:
+        # await self._model.rate_limiter.acquire(estimated_tokens)
         return await super().ainvoke(*args, **kwargs)
