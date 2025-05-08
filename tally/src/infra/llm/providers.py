@@ -6,7 +6,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_openai import ChatOpenAI
 
 from infra.config.settings import get_settings
-from infra.llm.models import ILLMProvider, OpenAIModels
+from infra.llm.models import ILLMProvider, OpenAIModels, RateLimitType
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class OpenAIProvider(ChatOpenAI, ILLMProvider):
         return len(enc.encode(text)) + self._max_tokens
 
     async def ainvoke(self, *args, **kwargs) -> Any:
-        # estimated_tokens = self.estimate_tokens(str(args[0]))
-        # if self._model.rate_limiter:
-        # await self._model.rate_limiter.acquire(estimated_tokens)
+        estimated_tokens = self.estimate_tokens(str(args[0]))
+        if self._model.rate_limiter:
+            await self._model.rate_limiter.acquire([(RateLimitType.REQUEST_LIMIT.value, 1), (RateLimitType.TOKEN_LIMIT.value, estimated_tokens)])
         return await super().ainvoke(*args, **kwargs)

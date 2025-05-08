@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+from datetime import timedelta
 
-from aiolimiter import AsyncLimiter
 from langchain_core.language_models import BaseLanguageModel
 
-from infra.config.rate_limiter import RateLimiter
-
+from infra.ratelimit.limiter import RateLimiter
+from infra.ratelimit.models import RateLimitRule, AlgorithmType
 
 class ILLMProvider(ABC):
     """Interface for providing configured LLM instances."""
@@ -38,6 +38,9 @@ class ILLMProvider(ABC):
         """
         pass
 
+class RateLimitType(str, Enum):
+    REQUEST_LIMIT = "request_limit"
+    TOKEN_LIMIT = "token_limit"
 
 class OpenAIModels(str, Enum):
     """
@@ -47,23 +50,35 @@ class OpenAIModels(str, Enum):
     GPT_4O = (
         "gpt-4o",
         RateLimiter(
-            request_limiters=[
-                AsyncLimiter(500, 60),  # 500 requests per minute
-            ],
-            token_limiters=[
-                AsyncLimiter(30000, 60),  # 30k tokens per minute
-            ],
+            rules={
+                RateLimitType.REQUEST_LIMIT.value: RateLimitRule(
+                    algorithm=AlgorithmType.LEAKY_BUCKET,
+                    limit=500,
+                    period=timedelta(minutes=1)
+                ),
+                RateLimitType.TOKEN_LIMIT.value: RateLimitRule(
+                    algorithm=AlgorithmType.TOKEN_BUCKET,
+                    limit=30000,
+                    period=timedelta(minutes=1)
+                )
+            },
         ),
     )
     GPT_O4_MINI = (
         "o4-mini",
         RateLimiter(
-            request_limiters=[
-                AsyncLimiter(500, 60),  # 500 requests per minute
-            ],
-            token_limiters=[
-                AsyncLimiter(200000, 60),  # 200k tokens per minute
-            ],
+            rules={
+                RateLimitType.REQUEST_LIMIT.value: RateLimitRule(
+                    algorithm=AlgorithmType.LEAKY_BUCKET,
+                    limit=500,
+                    period=timedelta(minutes=1)
+                ),
+                RateLimitType.TOKEN_LIMIT.value: RateLimitRule(
+                    algorithm=AlgorithmType.TOKEN_BUCKET,
+                    limit=200000,
+                    period=timedelta(minutes=1)
+                )
+            },
         ),
     )
 
