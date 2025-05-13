@@ -6,6 +6,7 @@ from langgraph_supervisor import create_supervisor
 from infra.agents.interfaces import IAgent
 from infra.tools.base import ITool
 
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

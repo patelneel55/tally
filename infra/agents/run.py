@@ -2,6 +2,7 @@ import sys
 
 import pysqlite3
 
+
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 import asyncio
@@ -16,6 +17,7 @@ from infra.agents.math_agent import MathAgent
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
 from infra.vector_stores.weaviate import WeaviateVectorStore
+
 
 if __name__ == "__main__":
 

@@ -2,6 +2,7 @@ import sys
 
 import pysqlite3
 
+
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 import asyncio
 import logging
@@ -20,10 +21,11 @@ from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.ingestion.web_loader import WebLoader
 from infra.llm.providers import OpenAIProvider
 from infra.preprocessing.html_parser import HTMLParser
-from infra.preprocessing.pdf_parser import PDFParser
 from infra.preprocessing.markdown_splitter import MarkdownSplitter
+from infra.preprocessing.pdf_parser import PDFParser
 from infra.preprocessing.sec_parser import SECParser, SECSplitter
 from infra.vector_stores.chromadb import ChromaVectorStore
+
 
 # Set up logging
 logging.basicConfig(

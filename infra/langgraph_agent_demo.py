@@ -9,23 +9,26 @@ import sys
 
 import pysqlite3
 
+
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 import asyncio
 import logging
 import os
 from datetime import datetime, timedelta
 
+from infra.output.simple import SimpleTextOutputFormatter
+
 from infra.acquisition.sec_fetcher import FilingType
 from infra.agents import LangGraphAgent
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
-from infra.output.simple import SimpleTextOutputFormatter
 from infra.pipelines.indexing_pipeline import IndexingPipeline
 from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
 
 # from infra.prompting.strategies import BasicPromptStrategy
 from infra.tools.pipelines import IndexingPipelineTool, RAGQueryTool
 from infra.vector_stores.chromadb import ChromaVectorStore
+
 
 # Set up logging
 logging.basicConfig(

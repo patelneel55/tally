@@ -1,10 +1,5 @@
 from typing import Any, Dict, List
 
-from langchain_core.documents import Document
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-
 from infra.core.interfaces import (
     IEmbeddingProvider,
     ILLMProvider,
@@ -12,6 +7,10 @@ from infra.core.interfaces import (
     IPromptStrategy,
     IVectorStore,
 )
+from langchain_core.documents import Document
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 
 
 class RAGFinancialAnalysisPipeline:

@@ -10,6 +10,7 @@ import sys
 
 import pysqlite3
 
+
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 import argparse
@@ -18,16 +19,18 @@ import logging
 import os
 import sys
 
+from infra.orchestration.controller import HybridController
+
 from infra.acquisition.sec_fetcher import DataFormat, FilingType
 
 # from infra.agents.base import LangChainAgent
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
-from infra.orchestration.controller import HybridController
 
 # from infra.prompting.strategies import BasicPromptStrategy
 from infra.tools.pipelines import IndexingPipelineTool
 from infra.vector_stores.chromadb import ChromaVectorStore
+
 
 # Set up logging
 logging.basicConfig(

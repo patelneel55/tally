@@ -11,13 +11,14 @@ import logging
 import os
 from typing import Any, List, Optional
 
+from infra.core.interfaces import ILLMProvider
 from langchain.agents import AgentType, initialize_agent
 from langchain.callbacks import FileCallbackHandler, StdOutCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 
 from infra.agents.interfaces import IAgent
-from infra.core.interfaces import ILLMProvider
 from infra.tools.base import ITool
+
 
 # Set up logging
 logger = logging.getLogger(__name__)

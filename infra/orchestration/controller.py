@@ -10,7 +10,6 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
-from infra.agents.base import IAgent, LangChainAgent
 from infra.core.interfaces import (
     IEmbeddingProvider,
     ILLMProvider,
@@ -18,11 +17,14 @@ from infra.core.interfaces import (
     IVectorStore,
 )
 from infra.output.simple import SimpleTextOutputFormatter
+
+from infra.agents.base import IAgent, LangChainAgent
 from infra.pipelines.indexing_pipeline import IndexingPipeline
 from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
 
 # from infra.tools.debug_tools import EchoTool
 from infra.tools.pipelines import IndexingPipelineTool, RAGQueryTool
+
 
 # from infra.pipelines.rag_pipeline import RAGFinancialAnalysisPipeline
 # from infra.tools.debug_tools import EchoTool

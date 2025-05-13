@@ -17,6 +17,7 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.prompts import BasePromptTemplate
 
+
 class IPromptStrategy(abc.ABC):
     """Interface for creating LLM prompts based on different strategies."""
 
@@ -42,6 +43,7 @@ class IPromptStrategy(abc.ABC):
             A configured LangChain BasePromptTemplate instance.
         """
         pass
+
 
 class IOutputFormatter(abc.ABC):
     """Interface for formatting the final output of the analysis."""
