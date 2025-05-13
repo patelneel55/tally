@@ -1,7 +1,6 @@
 import json
 import logging
-import re
-from typing import ClassVar, Optional
+from typing import ClassVar, List, Optional
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
@@ -19,6 +18,12 @@ logger = logging.getLogger(__name__)
 class CollectionRouterInput(BaseModel):
     query: str = Field(
         ..., description="Search query that is optimized for vector search"
+    )
+
+
+class CollectionRouterOutput(BaseModel):
+    collections: List[str] = Field(
+        description="A list of collections pertaining to the query"
     )
 
 
@@ -105,32 +110,13 @@ Example:
             query=router_input.query,
             collections_json=self._schema_registry.json_schema(),
         )
-        response = await llm.ainvoke(prompt)
-        # Chat models (like ChatOpenAI) return a message object (e.g., AIMessage)
-        # Older LLM models might return just a string
-        if hasattr(response, "content"):
-            schemas = response.content
-        elif isinstance(response, str):
-            schemas = response
-        if schemas.startswith("```"):
-            # Match ```json\n or ```\n at the start and ``` at the end
-            schemas = re.sub(r"^```(?:json)?\n?", "", schemas.strip())
-            schemas = re.sub(r"\n?```$", "", schemas)
 
-        try:
-            collection_names = json.loads(schemas)
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"Error during parsing LLM output into JSON schema: {e}", exc_info=True
-            )
-            collection_names = [
-                collection.name
-                for collection in self._schema_registry.all_collections()
-            ]
-
+        response: CollectionRouterOutput = await llm.with_structured_output(
+            CollectionRouterOutput
+        ).ainvoke(prompt)
         relevant_schemas = [
             json.loads(self._schema_registry.get_collection(col).json_schema())
-            for col in collection_names
+            for col in response.collections
         ]
         logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
         return json.dumps(relevant_schemas)

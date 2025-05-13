@@ -14,7 +14,7 @@ from sqlalchemy import JSON, DateTime, UnicodeText
 from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.sec_fetcher import SECFiling
-from infra.collections.models import BaseMetadata, ChunkType, HierarchyMetadata
+from infra.collections.models import ChunkType, HierarchyMetadata
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
 from infra.llm.models import ILLMProvider
@@ -45,6 +45,33 @@ class SECParser(IParser):
     Parser for SEC filings using the sec-parser library.
     """
 
+    _INT_NODE_INSTRUCTIONS = """
+You are a financial analyst creating a higher-level summary from multiple section summaries of an SEC filing.
+
+Each child section has already been summarized. Your task is to **build a sparse but high-fidelity overview** by:
+- Identifying **common themes or trends across children**
+- Extracting **material or standout disclosures**
+- Referring to child nodes for detailed points, rather than repeating them
+
+### Guidelines:
+- Do not summarize every child
+- Do not merge or paraphrase summaries without attribution
+- **If a child has no standout content, skip it**
+- Use section names or IDs to trace insight origin (e.g., "See Section 1B for forward-looking commentary")
+
+### Format:
+- Group findings under thematic headings
+- Include 1-3 bullets from relevant children
+- Use pointers instead of repeating full content (e.g., “See Child: 1B for litigation details”)
+
+Do not add new information. Do not speculate.
+Only return a structured summary.
+
+<children_info>
+{children_info}
+</children_info>
+"""
+
     def __init__(self, llm_provider: ILLMProvider):
         """Initialize the SEC parser."""
         self.llm_provider = llm_provider
@@ -68,7 +95,8 @@ class SECParser(IParser):
                 "ticker": mapped_column(UnicodeText, nullable=False),
                 "filing_type": mapped_column(UnicodeText, nullable=False),
                 "filing_date": mapped_column(DateTime(timezone=True), nullable=False),
-                "document_structure": mapped_column(JSON, nullable=False),
+                "status": mapped_column(UnicodeText, nullable=False),
+                "document_structure": mapped_column(JSON, nullable=True),
             },
         )
 
@@ -78,8 +106,62 @@ class SECParser(IParser):
             step for step in steps if not isinstance(step, SupplementaryTextClassifier)
         ]
 
+    async def _get_summary_from_cache(
+        self, content: str, metadata: SECFiling, custom_instructions: str = ""
+    ) -> str:
+        content_hash = self.summary_cache.generate_id(content)
+        cache_entry = self.summary_cache.get(content_hash)
+        if not cache_entry or not cache_entry["summary"]:
+            summarizer_input = SummarizerInput(
+                input=content, custom_instructions=custom_instructions
+            )
+            summary = await self.summarizer.execute(**summarizer_input.model_dump())
+            self.summary_cache.write(
+                content_hash,
+                ticker=metadata.ticker,
+                filing_type=metadata.formType,
+                filing_date=metadata.filing_date,
+                original_text=content,
+                summary=summary,
+            )
+            return summary
+        return cache_entry["summary"]
+
+    async def _index_hierarchy(
+        self, tree: sp.SemanticTree, metadata: SECFiling
+    ) -> MemoryTreeNode:
+        children_memories: List[MemoryTreeNode] = []
+        total_content: List[str] = []
+        for root_node in tree:
+            # Process each root node and its children
+            memory_tree, raw_content = await self._create_document_structure(
+                root_node, metadata
+            )
+            children_memories.append(memory_tree)
+            total_content.append(raw_content)
+
+        if len(children_memories) == 1:
+            return children_memories[0]
+
+        document_summaries = self._construct_summaries(children_memories, "")
+        summary = await self._get_summary_from_cache(
+            document_summaries,
+            metadata,
+            custom_instructions=self._INT_NODE_INSTRUCTIONS.format(
+                children_info=document_summaries
+            ),
+        )
+
+        return MemoryTreeNode(
+            id=str(uuid.uuid4()),
+            summary=summary,
+            content="",
+            node_type=ChunkType.TEXT,
+            children=children_memories,
+        )
+
     async def _convert_tree_to_documents(
-        self, tree: sp.SemanticTree, metadata: BaseMetadata
+        self, tree: sp.SemanticTree, metadata: SECFiling
     ) -> List[Document]:
         """
         Convert the parsed tree into a list of Document objects.
@@ -91,51 +173,26 @@ class SECParser(IParser):
         Returns:
             List of Document objects with structured SEC filing data
         """
-        metadata = SECFiling(**metadata.model_dump())
         metadata_hash = self.hierarchy_cache.generate_id(metadata.flatten_dict())
         hierarchy_entry = self.hierarchy_cache.get(metadata_hash)
+
+        # If the hierarchy cache exists, retrieve cache instead of re-indexing
+        # the document hierarchy
         if not hierarchy_entry or not hierarchy_entry["document_structure"]:
-            children_memories: List[MemoryTreeNode] = []
-            for root_node in tree:
-                # Process each root node and its children
-                memory_tree = await self._create_document_structure(root_node, metadata)
-                if memory_tree:
-                    children_memories.append(memory_tree)
-
-            if len(children_memories) == 1:
-                root_tree_node = children_memories[0]
-            else:
-                mega_summaries = self._construct_summaries(children_memories, "")
-                content_hash = self.summary_cache.generate_id(mega_summaries)
-                cache_entry = self.summary_cache.get(content_hash)
-                if not cache_entry or not cache_entry["summary"]:
-                    summarizer_input = SummarizerInput(input=mega_summaries)
-                    summary = await self.summarizer.execute(
-                        **summarizer_input.model_dump()
-                    )
-                    self.summary_cache.write(
-                        content_hash,
-                        ticker=metadata.ticker,
-                        filing_type=metadata.formType,
-                        filing_date=metadata.filing_date,
-                        original_text=mega_summaries,
-                        summary=summary,
-                    )
-                else:
-                    summary = cache_entry["summary"]
-
-                root_tree_node = MemoryTreeNode(
-                    id=str(uuid.uuid4()),
-                    summary=summary,
-                    content="",
-                    node_type=ChunkType.TEXT,
-                    children=children_memories,
-                )
             self.hierarchy_cache.write(
                 metadata_hash,
                 ticker=metadata.ticker,
                 filing_type=metadata.formType,
                 filing_date=metadata.filing_date,
+                status="in-progress",
+            )
+            root_tree_node = await self._index_hierarchy(tree, metadata)
+            self.hierarchy_cache.write(
+                metadata_hash,
+                ticker=metadata.ticker,
+                filing_type=metadata.formType,
+                filing_date=metadata.filing_date,
+                status="complete",
                 document_structure=root_tree_node.model_dump(),
             )
         else:
@@ -143,7 +200,7 @@ class SECParser(IParser):
                 hierarchy_entry["document_structure"]
             )
         write_content_to_file(
-            json.dumps(root_tree_node.model_dump()), "cache/AAPL.json"
+            json.dumps(root_tree_node.model_dump()), f"cache/{metadata.ticker}.json"
         )
         docs = self._create_docs_from_memory_tree(root_tree_node)
         return docs
@@ -177,18 +234,15 @@ class SECParser(IParser):
 
         children_memories: List[MemoryTreeNode] = []
         total_content: List[str] = []
-        for child in node.children:
-            child_mem, child_content = await self._create_document_structure(
-                child, metadata
-            )
+
+        # Create a list of coroutine objects and gather results
+        tasks = [
+            self._create_document_structure(child, metadata) for child in node.children
+        ]
+        results = await asyncio.gather(*tasks)
+        for child_mem, child_content in results:
             children_memories.append(child_mem)
             total_content.append(child_content)
-
-        # child_tasks = [
-        #     asyncio.create_task(self._create_document_structure(child, metadata))
-        #     for child in node.children
-        # ]
-        # children_memories: List[MemoryTreeNode] = await asyncio.gather(*child_tasks)
 
         # If there's only one child, we can merge it with the parent node
         # to avoid unnecessary nesting in the memory tree
@@ -222,23 +276,7 @@ class SECParser(IParser):
 
         # If it's a leaf node, generate summary of the text
         if len(node.children) == 0 and node.semantic_element.contains_words():
-            content_hash = self.summary_cache.generate_id(node_content)
-            cache_entry = self.summary_cache.get(content_hash)
-            if not cache_entry or not cache_entry["summary"]:
-                summarizer_input = SummarizerInput(
-                    input=node_content,
-                )
-                summary = await self.summarizer.execute(**summarizer_input.model_dump())
-                self.summary_cache.write(
-                    content_hash,
-                    ticker=metadata.ticker,
-                    filing_type=metadata.formType,
-                    filing_date=metadata.filing_date,
-                    original_text=node_content,
-                    summary=summary,
-                )
-            else:
-                summary = cache_entry["summary"]
+            summary = await self._get_summary_from_cache(node_content, node_metadata)
             current_node = MemoryTreeNode(
                 id=node_id,
                 summary=summary,
@@ -248,26 +286,14 @@ class SECParser(IParser):
             )
             return current_node, node_content
 
-        mega_summaries = self._construct_summaries(total_content, node_content)
-        content_hash = self.summary_cache.generate_id(mega_summaries)
-        cache_entry = self.summary_cache.get(content_hash)
-        if not cache_entry or not cache_entry["summary"]:
-            summarizer_input = SummarizerInput(
-                input=mega_summaries,
-            )
-            summary = await self.summarizer.execute(**summarizer_input.model_dump())
-            self.summary_cache.write(
-                content_hash,
-                original_text=mega_summaries,
-                summary=summary,
-                ticker=metadata.ticker,
-                filing_type=metadata.formType,
-                filing_date=metadata.filing_date,
-            )
-        else:
-            summary = cache_entry["summary"]
-
-        node_id = str(uuid.uuid4())
+        mega_summaries = self._construct_summaries(children_memories, node_content)
+        summary = await self._get_summary_from_cache(
+            mega_summaries,
+            node_metadata,
+            custom_instructions=self._INT_NODE_INSTRUCTIONS.format(
+                children_info=mega_summaries
+            ),
+        )
         current_node = MemoryTreeNode(
             id=node_id,
             summary=summary,
@@ -279,20 +305,25 @@ class SECParser(IParser):
         return current_node, mega_summaries
 
     def _construct_summaries(
-        self, children_memories: List[str], node_content: str
+        self, children_memories: List[MemoryTreeNode], node_content: str
     ) -> str:
         """
         Construct summaries for the children nodes and combine them with the parent node content.
         """
-        mega_summaries = []
-        for child in children_memories:
-            mega_summaries.append(child)
-        return (
-            "\n---------------\n"
-            + node_content
-            + "\n\n"
-            + "\n---------------\n".join(mega_summaries)
-        )
+        mega_summaries = f"""
+## Parent Section: {node_content}
+
+## Child Summaries:
+"""
+
+        for child_node in children_memories:
+            mega_summaries += f"""
+### Child ID: {child_node.id}
+
+{child_node.summary}
+
+"""
+        return mega_summaries
 
     def _cleanup_table_format(self, markdown_lines: str) -> str:
         """

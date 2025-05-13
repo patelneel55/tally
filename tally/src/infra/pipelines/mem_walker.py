@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from enum import Enum
@@ -240,17 +241,20 @@ Based on the system instructions, the overall user query, and the current contex
                     logger.info(
                         f"Exploring children {decision.next_children_ids} from node {current_node.id}"
                     )
+                    tasks = []
                     for child_id in decision.next_children_ids:
                         child_node = self._get_child_by_id(current_node, child_id)
                         if child_node and child_node not in visited_nodes:
-                            logger.info(f"Recursing into child node {child_id}")
-                            child_output = await self._navigate_recurse(
-                                query, child_node, visited_nodes, llm_calls
+                            tasks.append(
+                                self._navigate_recurse(
+                                    query, child_node, visited_nodes, llm_calls
+                                )
                             )
-                            output.collected_context.extend(
-                                child_output.collected_context
-                            )
-                            output.navigation_log.extend(child_output.navigation_log)
+
+                    results: List[Output] = await asyncio.gather(*tasks)
+                    for child_output in results:
+                        output.collected_context.extend(child_output.collected_context)
+                        output.navigation_log.extend(child_output.navigation_log)
 
                 if len(output.collected_context) == 0:
                     logger.warning(

@@ -1,16 +1,17 @@
 import hashlib
 import json
 import logging
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Generator, Optional, Type
 
 from parse import parse
 from sqlalchemy import DateTime, UnicodeText
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import declarative_base, mapped_column, sessionmaker
+from sqlalchemy.orm import Query, declarative_base, mapped_column, sessionmaker
 
 from infra.config.settings import get_settings
 
@@ -141,6 +142,9 @@ class Cache:
 
         cls._orm_models[model_key] = DynamicCacheEntry
         return DynamicCacheEntry
+
+    def get_model(self) -> Any:
+        return self._cache_model
 
     # --- Helper methods ---
     def _get_expiration_ts(self, ttl: Optional[int]) -> Optional[datetime]:
@@ -316,7 +320,7 @@ class Cache:
                 )
                 session.merge(entry)
                 session.commit()
-                logger.info(
+                logger.debug(
                     f"Successfully wrote cache for key '{key}' in '{self.table_name}'."
                 )
                 return True
@@ -428,3 +432,35 @@ class Cache:
                 exc_info=True,
             )
         return num_deleted
+
+    @contextmanager
+    def query_builder(
+        self,
+    ) -> Generator[Query, None, None]:  # Renamed to query_builder to clarify intent
+        """
+        Provides a SQLAlchemy Query object for building queries on the cache model.
+        The underlying session is automatically committed (or rolled back on error)
+        and closed upon exiting the 'with' block.
+
+        Usage:
+        with cache.query_builder() as q:
+            results = q.filter_by(id='my_key').all()
+            # ... perform more query operations within the same session context
+
+        Returns:
+            A SQLAlchemy Query object.
+        """
+        session = self._SessionLocal()
+        try:
+            yield session.query(self._cache_model)
+            session.commit()
+        except SQLAlchemyError as e:
+            logger.error(f"Database error during query operation: {e}", exc_info=True)
+            session.rollback()
+            raise  # Re-raise the exception after logging and rolling back
+        except Exception as e:
+            logger.error(f"Unexpected error during query operation: {e}", exc_info=True)
+            session.rollback()
+            raise  # Re-raise the exception
+        finally:
+            session.close()

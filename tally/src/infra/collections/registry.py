@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 from typing import Dict, List, Optional, Type
 
 from langchain_text_splitters import MarkdownTextSplitter
@@ -13,6 +14,12 @@ from infra.preprocessing.sec_parser import SECParser
 from infra.preprocessing.simple_splitters import LangChainTextSplitter
 
 
+class TraversalType(str, Enum):
+    MEM_WALK = "MemWalker"
+    VECTOR_SEARCH = "Vector Search"
+    MEM_WALK_AND_VECTOR = "MemWalker + Vector Search"
+
+
 class CollectionSchema(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -22,6 +29,7 @@ class CollectionSchema(BaseModel):
     example_queries: Optional[List[str]]
     indexer: IndexingPipeline
     indexer_schema: Type[BaseModel]
+    traversal: TraversalType
 
     def json_schema(self) -> str:
         base = self.model_dump(exclude={"metadata_model", "indexer", "indexer_schema"})
@@ -69,6 +77,7 @@ def get_schema_registry() -> MetadataSchemaRegistry:
                         splitter=LangChainTextSplitter(splitter=MarkdownTextSplitter),
                     ),
                     indexer_schema=FilingRequest,
+                    traversal=TraversalType.MEM_WALK,
                 ),
             }
         )
