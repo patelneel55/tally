@@ -1,10 +1,16 @@
 import logging
+from datetime import date, datetime
 from typing import Any, ClassVar, Dict, List
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 
+from infra.collections.registry import TraversalType, get_schema_registry
+from infra.databases.cache import Cache
 from infra.embeddings.models import IEmbeddingProvider
+from infra.llm.models import ILLMProvider
+from infra.pipelines.mem_walker import MemoryTreeNode, MemWalker
 from infra.tools.models import BaseTool
 from infra.vector_stores.models import IVectorStore
 
@@ -22,13 +28,88 @@ class VectorSearchQuery(BaseModel):
     )
     k: int = Field(
         default=5,
-        description="The maximum number of relevant document chunks to retrieve",
+        description="The maximum number o relevant document chunks to retrieve",
     )
     collection: str = Field(..., description="Collection name of the vector database")
     filters: Dict[str, Any] = Field(
         ...,
         description="Filter criteria for document metadata retrieval. Only provide values if absolutely sure and necessary",
     )
+
+
+class DatabaseSearchTool(BaseTool):
+    _TOOL_NAME: ClassVar[str] = "database_search"
+    _TOOL_DESCRIPTION: ClassVar[str] = ""
+
+    def __init__(
+        self,
+        llm_provider: ILLMProvider,
+        vector_store: IVectorStore,
+        embeddings: IEmbeddingProvider,
+    ):
+        super().__init__(
+            name=self._TOOL_NAME,
+            description=self._TOOL_DESCRIPTION,
+            args_schema=VectorSearchQuery,
+        )
+        self._schema_registry = get_schema_registry()
+        self._vector_store = vector_store
+        self._embeddings = embeddings
+        self._llm_provider = llm_provider
+
+    async def execute(self, **kwargs) -> str:
+        logger.info(f"📌 TOOL EXECUTION: {self.name}")
+        try:
+            search_query = VectorSearchQuery(**kwargs)
+            collection = self._schema_registry.get_collection(search_query.collection)
+
+            if collection.traversal == TraversalType.MEM_WALK:
+                # Identify the root tree nodes
+                # Based on the metadata filters, filter the database cache to see
+                # if there are any rows with the necessary hierarchy data
+                # The identifiable information includes ticker, form type
+                # and year/quarter
+
+                # 1. Identify the appropriate table (not sure how to do this)
+                db_table: Cache = None
+                target_date = search_query.filters["filing_date"]
+                target_year = target_date.year
+                target_quarter = (target_date.month - 1) // 3 + 1
+
+                # Get the column attribute dynamically from the model class
+                date_column = getattr(model_class, "filing_date")
+
+                # Construct the SQLAlchemy query using session.query()
+                query = session_obj.query(model_class).filter(
+                    func.extract("year", date_column) == target_year,
+                    func.extract("quarter", date_column) == target_quarter,
+                )
+
+                # 2. Once table is identified, make an sql call to retrieve all relevant rows
+                with db_table.query_builder() as q:
+                    root_nodes = q.filter(
+                        func.extract("year", filing_date) == target_year,
+                        func.extract("quarter", filing_date) == target_quarter,
+                    ).all()
+
+                root_nodes: MemoryTreeNode = [
+                    getattr(node, "hierarchy") for node in root_nodes
+                ]
+
+                # 3. Parse all rows
+                mem_walker = MemWalker(llm_provider=self._llm_provider)
+                output = []
+                for root_node in root_nodes:
+                    output.append(
+                        await mem_walker.navigate_tree(search_query, root_node)
+                    )
+
+            logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
+            return summary.strip()
+        except Exception as e:
+            # Catch potential errors from format_prompt or invoke
+            logger.error(f"Error during TableSummarizer run: {e}", exc_info=True)
+            raise
 
 
 class VectorSearchTool(BaseTool):

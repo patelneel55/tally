@@ -115,6 +115,7 @@ class WebLoader(IDocumentLoader):
 
                 # Register a route for the exact URL to intercept the navigation
                 await context.page.route(url, route_handler)
+                return
 
         return _prenav_cache_hook
 

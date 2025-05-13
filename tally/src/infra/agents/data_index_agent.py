@@ -15,7 +15,7 @@ from infra.vector_stores.models import IVectorStore
 logger = logging.getLogger(__name__)
 
 
-class DataIndexAgent(LangGraphReActAgent):
+class RetrievalAgent(LangGraphReActAgent):
     AGENT_NAME = "DataIndexer"
     SYSTEM_MESSAGE = """
 You are an AI assistant responsible for managing the status of indexed data sources.
@@ -32,13 +32,18 @@ Provide clear status updates based on the tool outputs.
         embedding_provider: IEmbeddingProvider,
     ):
         index_tools = [
-            CollectionRouterTool(llm_provider=llm_provider),
-            VectorSearchTool(vector_store=vector_store, embeddings=embedding_provider),
-            # SQLAlchemySearchTool(engine=sqlalchemy_engine),
-            IndexingPipelineTool(
-                vector_store=vector_store,
-                embeddings=embedding_provider,
-            ),
+            CollectionRouterTool(
+                llm_provider=llm_provider
+            ),  # Retrieves the relevant collections that would answer the query
+            DataCheckerTool(),  # Checks whether the relevant data exists
+            WebSearchTool(),
+            DatabaseSearchTool(),
+            # VectorSearchTool(vector_store=vector_store, embeddings=embedding_provider),
+            # # SQLAlchemySearchTool(engine=sqlalchemy_engine),
+            # IndexingPipelineTool(
+            #     vector_store=vector_store,
+            #     embeddings=embedding_provider,
+            # ),
         ]
 
         super().__init__(

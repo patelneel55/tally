@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from enum import Enum
 from datetime import timedelta
+from enum import Enum
 
 from langchain_core.language_models import BaseLanguageModel
 
 from infra.ratelimit.limiter import RateLimiter
-from infra.ratelimit.models import RateLimitRule, AlgorithmType
+from infra.ratelimit.models import AlgorithmType, RateLimitRule
+
 
 class ILLMProvider(ABC):
     """Interface for providing configured LLM instances."""
@@ -38,9 +39,11 @@ class ILLMProvider(ABC):
         """
         pass
 
+
 class RateLimitType(str, Enum):
     REQUEST_LIMIT = "request_limit"
     TOKEN_LIMIT = "token_limit"
+
 
 class OpenAIModels(str, Enum):
     """
@@ -54,13 +57,13 @@ class OpenAIModels(str, Enum):
                 RateLimitType.REQUEST_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.LEAKY_BUCKET,
                     limit=500,
-                    period=timedelta(minutes=1)
+                    period=timedelta(minutes=1),
                 ),
                 RateLimitType.TOKEN_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.TOKEN_BUCKET,
                     limit=30000,
-                    period=timedelta(minutes=1)
-                )
+                    period=timedelta(minutes=1),
+                ),
             },
         ),
     )
@@ -71,13 +74,13 @@ class OpenAIModels(str, Enum):
                 RateLimitType.REQUEST_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.LEAKY_BUCKET,
                     limit=500,
-                    period=timedelta(minutes=1)
+                    period=timedelta(minutes=1),
                 ),
                 RateLimitType.TOKEN_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.TOKEN_BUCKET,
                     limit=200000,
-                    period=timedelta(minutes=1)
-                )
+                    period=timedelta(minutes=1),
+                ),
             },
         ),
     )

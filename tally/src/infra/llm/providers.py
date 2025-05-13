@@ -1,5 +1,5 @@
 import logging
-from typing import Any, ClassVar
+from typing import Any
 
 import tiktoken
 from langchain_core.language_models import BaseLanguageModel
@@ -53,5 +53,10 @@ class OpenAIProvider(ChatOpenAI, ILLMProvider):
     async def ainvoke(self, *args, **kwargs) -> Any:
         estimated_tokens = self.estimate_tokens(str(args[0]))
         if self._model.rate_limiter:
-            await self._model.rate_limiter.acquire([(RateLimitType.REQUEST_LIMIT.value, 1), (RateLimitType.TOKEN_LIMIT.value, estimated_tokens)])
+            await self._model.rate_limiter.acquire(
+                [
+                    (RateLimitType.REQUEST_LIMIT.value, 1),
+                    (RateLimitType.TOKEN_LIMIT.value, estimated_tokens),
+                ]
+            )
         return await super().ainvoke(*args, **kwargs)
