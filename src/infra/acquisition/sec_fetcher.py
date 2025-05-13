@@ -22,8 +22,6 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from schema import And, Or, Schema, Use
-from sqlalchemy import PickleType
-from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.exceptions import DataFetchError, ValidationError
 from infra.acquisition.models import (
@@ -36,6 +34,7 @@ from infra.collections.models import ChunkType
 from infra.config.settings import get_settings
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
+from infra.databases.registry import TABLE_SCHEMAS, TableNames
 
 
 # Set up logging
@@ -215,8 +214,6 @@ class EDGARFetcher(IDataFetcher):
     limiting, and data formatting.
     """
 
-    _CACHE_COLUMNS = {"value": mapped_column(PickleType, nullable=False)}
-
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize the SEC filing fetcher.
@@ -233,8 +230,8 @@ class EDGARFetcher(IDataFetcher):
 
         self._cache = Cache(
             get_sqlalchemy_engine(),
-            table_name="sec_filings",
-            column_mapping=self._CACHE_COLUMNS,
+            table_name=TableNames.SECFilings.value,
+            column_mapping=TABLE_SCHEMAS[TableNames.SECFilings],
         )
 
     async def fetch(self, **kwargs) -> List[SECFiling]:

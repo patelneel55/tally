@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     #
     # The databases will be used for caching and storing all relevant
     # data for the infrastructure
+    AUTO_MIGRATE_DB: bool = Field(default=False, alias="AUTO_MIGRATE_DB")
     DB_ENGINE_URL: str = Field(..., alias="DB_ENGINE_URL")
     WEAVIATE_HTTP_URL: str = Field(..., alias="WEAVIATE_HTTP_URL")
     WEAVIATE_GRPC_URL: str = Field(..., alias="WEAVIATE_GRPC_URL")

@@ -10,13 +10,12 @@ from typing import List, Tuple
 import sec_parser as sp
 from langchain_core.documents import Document
 from sec_parser.processing_steps import SupplementaryTextClassifier
-from sqlalchemy import JSON, DateTime, UnicodeText
-from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.sec_fetcher import SECFiling
 from infra.collections.models import ChunkType, HierarchyMetadata
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
+from infra.databases.registry import TABLE_SCHEMAS, TableNames
 from infra.llm.models import ILLMProvider
 from infra.pipelines.mem_walker import MemoryTreeNode
 from infra.preprocessing.models import IParser
@@ -79,25 +78,13 @@ Only return a structured summary.
 
         self.summary_cache = Cache(
             engine=get_sqlalchemy_engine(),
-            table_name="sec_filing_summary",
-            column_mapping={
-                "ticker": mapped_column(UnicodeText, nullable=False),
-                "filing_type": mapped_column(UnicodeText, nullable=False),
-                "filing_date": mapped_column(DateTime(timezone=True), nullable=False),
-                "original_text": mapped_column(UnicodeText, nullable=False),
-                "summary": mapped_column(UnicodeText, nullable=False),
-            },
+            table_name=TableNames.SECFilingSummary.value,
+            column_mapping=TABLE_SCHEMAS[TableNames.SECFilingSummary],
         )
         self.hierarchy_cache = Cache(
             engine=get_sqlalchemy_engine(),
-            table_name="sec_filing_hierarchy",
-            column_mapping={
-                "ticker": mapped_column(UnicodeText, nullable=False),
-                "filing_type": mapped_column(UnicodeText, nullable=False),
-                "filing_date": mapped_column(DateTime(timezone=True), nullable=False),
-                # "status": mapped_column(UnicodeText, nullable=False),
-                "document_structure": mapped_column(JSON, nullable=True),
-            },
+            table_name=TableNames.SECFilingHierarchy.value,
+            column_mapping=TABLE_SCHEMAS[TableNames.SECFilingHierarchy],
         )
 
     def get_classifer_steps(self) -> list:

@@ -3,14 +3,13 @@ from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 from langchain_core.documents import Document
-from sqlalchemy import LargeBinary
-from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.models import AcquisitionOutput
 from infra.acquisition.sec_fetcher import SECFiling
 from infra.config.settings import get_settings
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
+from infra.databases.registry import TABLE_SCHEMAS, TableNames
 from infra.ingestion.models import IDocumentLoader
 
 
@@ -24,10 +23,6 @@ class EDGARPDFLoader(IDocumentLoader):
     and returns the raw PDF data
     """
 
-    _CACHE_COLUMNS = {
-        "pdf_content": mapped_column(LargeBinary, nullable=False),
-    }
-
     def __init__(self, api_key: str):
         """
         Initializes the EDGARPDFLoader with the specified API key.
@@ -40,8 +35,8 @@ class EDGARPDFLoader(IDocumentLoader):
         self.session = None
         self._cache = Cache(
             engine=get_sqlalchemy_engine(),
-            table_name="pdf_loader",
-            column_mapping=self._CACHE_COLUMNS,
+            table_name=TableNames.PDFLoder.value,
+            column_mapping=TABLE_SCHEMAS[TableNames.PDFLoder],
         )
 
     async def load(self, sources: List[AcquisitionOutput]) -> List[Document]:

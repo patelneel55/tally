@@ -9,7 +9,9 @@ from infra.collections.registry import get_schema_registry
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
 from infra.pipelines.mem_walker import MemoryTreeNode, MemWalker
-from infra.vector_stores.weaviate import WeaviateVectorStore
+
+
+# from infra.vector_stores.weaviate import WeaviateVectorStore
 
 
 class CaptureFullPromptHandler(BaseCallbackHandler):
@@ -99,7 +101,7 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG)
         collection = get_schema_registry().get_collection("SECFilings")
         collection.indexer.embedding_provider = OpenAIEmbeddingProvider()
-        collection.indexer.vector_store = WeaviateVectorStore(index_name="SECFilings")
+        # collection.indexer.vector_store = WeaviateVectorStore(index_name="SECFilings")
         await collection.indexer.run(
             **{
                 "identifier": ["JPM"],

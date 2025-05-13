@@ -11,12 +11,11 @@ from crawlee.crawlers import (
 )
 from langchain_core.documents import Document
 from pydantic import BaseModel
-from sqlalchemy import Integer, PickleType, UnicodeText
-from sqlalchemy.orm import mapped_column
 
 from infra.acquisition.models import AcquisitionOutput
 from infra.databases.cache import Cache
 from infra.databases.engine import get_sqlalchemy_engine
+from infra.databases.registry import TABLE_SCHEMAS, TableNames
 from infra.ingestion.models import IDocumentLoader
 
 
@@ -46,12 +45,6 @@ class WebLoader(IDocumentLoader):
 
     """
 
-    _CACHE_COLUMNS = {
-        "headers": mapped_column(PickleType, nullable=False),
-        "status_code": mapped_column(Integer, nullable=False),
-        "body": mapped_column(UnicodeText, nullable=True),
-    }
-
     def __init__(
         self,
         crawl_strategy: CrawlStrategy = CrawlStrategy.SAME_DOMAIN,
@@ -68,8 +61,8 @@ class WebLoader(IDocumentLoader):
         )
         self._cache = Cache(
             engine=get_sqlalchemy_engine(),
-            table_name="web_loader",
-            column_mapping=self._CACHE_COLUMNS,
+            table_name=TableNames.WebLoader.value,
+            column_mapping=TABLE_SCHEMAS[TableNames.WebLoader],
         )
 
     async def load(self, sources: List[AcquisitionOutput]) -> List[Document]:

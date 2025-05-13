@@ -13,7 +13,12 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Query, declarative_base, mapped_column, sessionmaker
 
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
 from infra.config.settings import get_settings
+from infra.utils import find_project_root
 
 
 # Setup logger
@@ -29,6 +34,37 @@ class CacheValueType(Enum):
 Base = declarative_base()
 
 
+def bootstrap_migrations(engine: Engine, alembic_ini_path: str = "alembic.ini"):
+    alembic_cfg = Config(
+        str(find_project_root(Path(__file__).resolve()) / alembic_ini_path)
+    )
+    alembic_cfg.set_main_option(
+        "sqlalchemy.url", engine.url.render_as_string(hide_password=False)
+    )
+
+    command.upgrade(alembic_cfg, "head")
+    if get_settings().AUTO_MIGRATE_DB:
+        conn = engine.connect()
+        mc = MigrationContext.configure(
+            connection=conn,
+            opts={
+                "compare_type": True,
+                "compare_server_default": True,
+                "target_metadata": Base.metadata,
+            },
+        )
+        diffs = compare_metadata(mc, Base.metadata)
+        conn.close()
+
+        if diffs:
+            command.revision(
+                alembic_cfg, message="Cache: autogen schema change", autogenerate=True
+            )
+            command.upgrade(alembic_cfg, "head")
+        else:
+            logger.debug("No schema changes detected; skipping revision step")
+
+
 class Cache:
     """
     A flexible caching implementation using SQLAlchemy, supporting dynamic table
@@ -38,6 +74,8 @@ class Cache:
     _orm_models: Dict[str, Type[Base]] = (
         {}
     )  # Class-level cache for generated ORM models
+
+    _bootstrap_migrations = False
 
     def __init__(self, engine: Engine, table_name: str, column_mapping: Dict = None):
         """
@@ -57,28 +95,19 @@ class Cache:
             raise TypeError("engine must be a valid SQLAlchemy Engine instance.")
         self.engine = engine
         self.table_name = table_name
+        self._column_mapping = column_mapping or {}
 
         # Get or create the dynamic ORM model for this table/type combination
         self._cache_model = self._get_or_create_cache_model(
-            table_name, column_mapping=column_mapping
+            table_name, column_mapping=self._column_mapping
         )
-
         # Create table if it doesn't exist using this specific model's metadata
-        try:
-            logger.info(f"Ensuring cache table '{self.table_name}' exists...")
-            # Create only the specific table associated with this model
-            self._cache_model.metadata.create_all(
-                self.engine, tables=[self._cache_model.__table__]
-            )
-            logger.info(f"Cache table '{self.table_name}' ready.")
-        except SQLAlchemyError as e:
-            logger.error(
-                f"Failed to create or access cache table '{self.table_name}': {e}",
-                exc_info=True,
-            )
-            raise ConnectionError(
-                f"Failed to initialize cache table '{self.table_name}'"
-            ) from e
+        logger.info(f"Ensuring cache table '{self.table_name}' exists...")
+        # Create only the specific table associated with this model
+        if not Cache._bootstrap_migrations:
+            bootstrap_migrations(self.engine)
+            Cache._bootstrap_migrations = True
+        logger.info(f"Cache table '{self.table_name}' ready.")
 
         # Create a configured "Session" class bound to the engine
         self._SessionLocal = sessionmaker(
