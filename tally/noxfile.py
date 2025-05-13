@@ -33,6 +33,7 @@ nox.options.sessions = (
     "typeguard",
     "xdoctest",
     "docs-build",
+    "lint",
 )
 
 
@@ -110,6 +111,30 @@ def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
                 break
 
 
+@session(python=python_versions[0])
+def lint(session: Session) -> None:
+    """Lint using pre-commit."""
+    args = session.posargs or [
+        "run",
+        "--all-files",
+    ]
+    session.install(
+        "black",
+        "darglint",
+        "flake8",
+        "flake8-bandit",
+        "flake8-bugbear",
+        "flake8-docstrings",
+        "flake8-rst-docstrings",
+        "isort",
+        "pep8-naming",
+        "pre-commit",
+        "pre-commit-hooks",
+        "pyupgrade",
+    )
+    session.run("pre-commit", *args)
+
+
 @session(name="pre-commit", python=python_versions[0])
 def precommit(session: Session) -> None:
     """Lint using pre-commit."""
@@ -161,7 +186,9 @@ def mypy(session: Session) -> None:
 def tests(session: Session) -> None:
     """Run the test suite."""
     session.install(".")
-    session.install("coverage[toml]", "pytest", "pygments", "pytest-cov", "pytest-asyncio")
+    session.install(
+        "coverage[toml]", "pytest", "pygments", "pytest-cov", "pytest-asyncio"
+    )
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
     finally:

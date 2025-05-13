@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"] # match your python_versions
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      
+      - name: Install pipx and tools
+        run: |
+          python -m pip install pipx
+          pipx ensurepath
+          pipx install poetry
+          pipx install nox
+          pipx inject nox nox-poetry
+          poetry self add poetry-plugin-export
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pre-commit-
+
+      - name: Run lint checks
+        run: nox -s lint
+        working-directory: ./tally
+
+      - name: Run Tests
+        run: nox -s tests
+        working-directory: ./tally
+
+      - name: Generate Coverage Report
+        run: nox -s coverage -- html
+        working-directory: ./tally
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov
+          path: tally/htmlcov/
