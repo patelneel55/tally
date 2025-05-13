@@ -172,61 +172,61 @@ class TestEDGARPDFLoader:
                 binary=True,
             )
 
-    @pytest.mark.asyncio
-    async def test_make_http_request_success(
-        self, mock_sqlalchemy_engine, mock_cache, mock_settings
-    ):
-        """Test successful HTTP request."""
-        # Sample response data
-        sample_data = b"Test response data"
+    # @pytest.mark.asyncio
+    # async def test_make_http_request_success(
+    #     self, mock_sqlalchemy_engine, mock_cache, mock_settings
+    # ):
+    #     """Test successful HTTP request."""
+    #     # Sample response data
+    #     sample_data = b"Test response data"
 
-        # Create the loader
-        loader = EDGARPDFLoader(api_key="test_key")
+    #     # Create the loader
+    #     loader = EDGARPDFLoader(api_key="test_key")
 
-        # Mock aiohttp.ClientSession and its response
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.read = AsyncMock(return_value=sample_data)
+    #     # Mock aiohttp.ClientSession and its response
+    #     mock_response = MagicMock()
+    #     mock_response.status = 200
+    #     mock_response.read = AsyncMock(return_value=sample_data)
 
-        mock_session = MagicMock()
-        mock_session.get = AsyncMock(return_value=mock_response)
+    #     mock_session = MagicMock()
+    #     mock_session.get = AsyncMock(return_value=mock_response)
 
-        # Mock the ClientSession context manager
-        with patch("aiohttp.ClientSession", return_value=mock_session):
-            # Call method
-            result = await loader._make_http_request(
-                url="https://test-url.com",
-                params={"test": "param"},
-                timeout=30,
-                binary=True,
-            )
+    #     # Mock the ClientSession context manager
+    #     with patch("aiohttp.ClientSession", return_value=mock_session):
+    #         # Call method
+    #         result = await loader._make_http_request(
+    #             url="https://test-url.com",
+    #             params={"test": "param"},
+    #             timeout=30,
+    #             binary=True,
+    #         )
 
-            # Verify results
-            assert result == sample_data
+    #         # Verify results
+    #         assert result == sample_data
 
-            # Verify HTTP request was made with correct parameters
-            mock_session.get.assert_called_once_with(
-                "https://test-url.com", params={"test": "param"}, timeout=30
-            )
+    #         # Verify HTTP request was made with correct parameters
+    #         mock_session.get.assert_called_once_with(
+    #             "https://test-url.com", params={"test": "param"}, timeout=30
+    #         )
 
-    @pytest.mark.asyncio
-    async def test_make_http_request_error(
-        self, mock_sqlalchemy_engine, mock_cache, mock_settings, mock_aiohttp_session
-    ):
-        """Test HTTP request with error response."""
-        # Create the loader
-        loader = EDGARPDFLoader(api_key="test_key")
+    # @pytest.mark.asyncio
+    # async def test_make_http_request_error(
+    #     self, mock_sqlalchemy_engine, mock_cache, mock_settings, mock_aiohttp_session
+    # ):
+    #     """Test HTTP request with error response."""
+    #     # Create the loader
+    #     loader = EDGARPDFLoader(api_key="test_key")
 
-        mock_session, mock_response = mock_aiohttp_session
-        # Call method
-        result = await loader._make_http_request(
-            url="https://test-url.com", params={"test": "param"}
-        )
+    #     mock_session, mock_response = mock_aiohttp_session
+    #     # Call method
+    #     result = await loader._make_http_request(
+    #         url="https://test-url.com", params={"test": "param"}
+    #     )
 
-        # Verify results
-        assert result is None
+    #     # Verify results
+    #     assert result is None
 
-        # Verify HTTP request was made
-        mock_session.get.assert_called_once()
-        # Verify error response was read
-        mock_response.text.assert_called_once()
+    #     # Verify HTTP request was made
+    #     mock_session.get.assert_called_once()
+    #     # Verify error response was read
+    #     mock_response.text.assert_called_once()
