@@ -1,6 +1,6 @@
 from enum import Enum
 
-from sqlalchemy import JSON, DateTime, Integer, LargeBinary, PickleType, UnicodeText
+from sqlalchemy import JSON, DateTime, Integer, PickleType, UnicodeText
 from sqlalchemy.orm import mapped_column
 
 from infra.databases.cache import Cache
@@ -28,7 +28,7 @@ TABLE_SCHEMAS = {
         "ticker": mapped_column(UnicodeText, nullable=False),
         "filing_type": mapped_column(UnicodeText, nullable=False),
         "filing_date": mapped_column(DateTime(timezone=True), nullable=False),
-        # "status": mapped_column(UnicodeText, nullable=False),
+        "status": mapped_column(UnicodeText, nullable=False),
         "document_structure": mapped_column(JSON, nullable=True),
     },
     TableNames.SECFilingSummary: {

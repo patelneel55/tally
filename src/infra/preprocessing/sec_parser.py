@@ -166,20 +166,20 @@ Only return a structured summary.
         # If the hierarchy cache exists, retrieve cache instead of re-indexing
         # the document hierarchy
         if not hierarchy_entry or not hierarchy_entry["document_structure"]:
-            # self.hierarchy_cache.write(
-            #     metadata_hash,
-            #     ticker=metadata.ticker,
-            #     filing_type=metadata.formType,
-            #     filing_date=metadata.filing_date,
-            #     # status="in-progress",
-            # )
+            self.hierarchy_cache.write(
+                metadata_hash,
+                ticker=metadata.ticker,
+                filing_type=metadata.formType,
+                filing_date=metadata.filing_date,
+                status="in-progress",
+            )
             root_tree_node = await self._index_hierarchy(tree, metadata)
             self.hierarchy_cache.write(
                 metadata_hash,
                 ticker=metadata.ticker,
                 filing_type=metadata.formType,
                 filing_date=metadata.filing_date,
-                # status="complete",
+                status="complete",
                 document_structure=root_tree_node.model_dump(),
             )
         else:
