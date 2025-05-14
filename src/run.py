@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import sys
+import time
 
 import langchain
 from langchain.callbacks.base import BaseCallbackHandler
@@ -9,6 +11,8 @@ from infra.collections.registry import get_schema_registry
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
 from infra.pipelines.mem_walker import MemoryTreeNode, MemWalker
+from infra.tools.vector_search import DatabaseSearchTool, VectorSearchQuery
+from infra.utils import ProgressTracker
 
 
 # from infra.vector_stores.weaviate import WeaviateVectorStore
@@ -57,56 +61,111 @@ if __name__ == "__main__":
         #     # config={"callbacks": [CaptureFullPromptHandler(), callback]},
         # )
         # print(result)
+        search_tool = DatabaseSearchTool(llm_provider=OpenAIProvider())
 
-        # logging.basicConfig(level=logging.INFO)
-        # import json
+        async def run_case(ticker, case, answer, tracker):
+            start = time.perf_counter()
+            output_str = await search_tool.execute(
+                **VectorSearchQuery(
+                    query=case,
+                    justification="Why not?",
+                    collection="SECFilings",
+                    filters={
+                        "ticker": ticker,
+                        "formType": "10-Q",
+                    },
+                ).model_dump()
+            )
+            end = time.perf_counter()
+            await tracker.step()
+            output = json.loads(output_str)
+            output["case"] = case
+            output["duration"] = f"{end - start:.4f}"
+            # if not answer:
+            #     return output
 
-        # with open("cache/AAPL.json") as f:
-        #     data = json.load(f)
-        # mem_tree = MemoryTreeNode(**data)
+            # # Verify whether the response matches the answer
+            # context = output["collected_context"]
 
-        # mem_walker = MemWalker(llm_provider=OpenAIProvider())
-        # context_output = await mem_walker.navigate_tree(
-        #     # "How did Apple's net cash position change from September 28, 2024 to March 29, 2025, and what were the primary drivers of that change?",
-        #     # "List all related information to Apple's liquidity strategy, including cash flow from operations, investing, and financing activities",
-        #     # "Summarize Apple's liquidity strategy, including cash flow from operations, investing, and financing activities.",
-        #     # "What were the year-over-year changes in EPS (basic and diluted)?",
-        #     # "Compare the gross margins for Products vs. Services in Q2 2025",
-        #     # "List the contingencies that the company has and list the new products for the second quarter",
-        #     # "How much was the change in foreign currency translation, net of tax YoY?",
-        #     # "List all the ongoing legal proceedings against the company",
-        #     # "How much cash and cash equivalents were held in escrow?",
-        #     # "What is the latest buyback authorization?",
-        #     # "List all exhibits in the document",
-        #     # "How many vendors represented 10% or more of vendor receivables?",
-        #     # "What were the product updates announced this quarter?",
-        #     # "As of December 28, 2024, the Company had two vendors that individually represented 10% or more of total vendor non-trade receivables, which accounted for 43% and 24%.",
-        #     # "Give me all the details for all the ongoing legal proceedings against AAPL",
-        #     # "What is the operating income for six month march 2025?",
-        #     mem_tree,
-        # )
+            return output
 
-        # with open("cache/collected_context.json", "w") as f:
-        #     json.dump(
-        #         [ob.model_dump() for ob in context_output.collected_context],
-        #         f,
-        #         indent=2,
-        #     )
+        test_cases = {
+            "AAPL": [
+                ("What is the operating income for six month ended march 2025?", None),
+                # ("How did Apple's net cash position change from September 28, 2024 to March 29, 2025, and what were the primary drivers of that change?", None),
+                # ("List all related information to Apple's liquidity strategy, including cash flow from operations, investing, and financing activities",None),
+                # ("Summarize Apple's liquidity strategy, including cash flow from operations, investing, and financing activities.",None),
+                (
+                    "What were the year-over-year changes in EPS (basic and diluted)?",
+                    None,
+                ),
+                (
+                    "Compare the gross margins for Products vs. Services in Q2 2025",
+                    None,
+                ),
+                (
+                    "List the contingencies that the company has and list the new products for the second quarter",
+                    None,
+                ),
+                (
+                    "How much was the change in foreign currency translation, net of tax YoY?",
+                    None,
+                ),
+                ("List all the ongoing legal proceedings against the company", None),
+                ("How much cash and cash equivalents were held in escrow?", None),
+                ("What is the latest buyback authorization?", None),
+                ("List all exhibits in the document", None),
+                (
+                    "How many vendors represented 10% or more of vendor receivables?",
+                    None,
+                ),
+                ("What were the product updates announced this quarter?", None),
+            ],
+            "JPM": [
+                # ("What business segments contributed most to noninterest revenue?", None),
+            ],
+        }
 
-        # with open("cache/navigation.json", "w") as f:
-        #     json.dump(
-        #         [ob.model_dump() for ob in context_output.navigation_log], f, indent=2
-        #     )
+        flattened = [
+            (ticker, case, answer)
+            for ticker, cases in test_cases.items()
+            for case, answer in cases
+        ]
+        async with ProgressTracker(len(flattened)) as tracker:
+            tasks = [
+                run_case(ticker, case, answer, tracker)
+                for ticker, case, answer in flattened
+            ]
+            results = await asyncio.gather(*tasks)
 
-        logging.basicConfig(level=logging.DEBUG)
-        collection = get_schema_registry().get_collection("SECFilings")
-        collection.indexer.embedding_provider = OpenAIEmbeddingProvider()
-        # collection.indexer.vector_store = WeaviateVectorStore(index_name="SECFilings")
-        await collection.indexer.run(
-            **{
-                "identifier": ["JPM"],
-                "filing_type": "10-Q",
-            }
+        with open("cache/retrieval_testing.json", "w") as f:
+            json.dump(results, f, indent=2)
+
+        logging.basicConfig(level=logging.INFO)
+        search_tool = DatabaseSearchTool(llm_provider=OpenAIProvider())
+        output_str = await search_tool.execute(
+            **VectorSearchQuery(
+                query="What is the latest buyback authorization?",
+                justification="Why not?",
+                collection="SECFilings",
+                filters={
+                    "ticker": "AAPL",
+                    "formType": "10-Q",
+                },
+            ).model_dump()
         )
+        with open("cache/output.json", "w") as f:
+            f.write(output_str)
+
+        # logging.basicConfig(level=logging.DEBUG)
+        # collection = get_schema_registry().get_collection("SECFilings")
+        # collection.indexer.embedding_provider = OpenAIEmbeddingProvider()
+        # # collection.indexer.vector_store = WeaviateVectorStore(index_name="SECFilings")
+        # await collection.indexer.run(
+        #     **{
+        #         "identifier": ["AAPL"],
+        #         "filing_type": "10-Q",
+        #     }
+        # )
 
     sys.exit(asyncio.run(run()))

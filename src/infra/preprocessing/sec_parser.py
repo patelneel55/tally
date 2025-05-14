@@ -20,6 +20,7 @@ from infra.llm.models import ILLMProvider
 from infra.pipelines.mem_walker import MemoryTreeNode
 from infra.preprocessing.models import IParser
 from infra.tools.summarizer import SummarizerInput, SummarizerTool
+from infra.utils import ProgressTracker
 
 
 logger = logging.getLogger(__name__)
@@ -45,30 +46,39 @@ class SECParser(IParser):
     """
 
     _INT_NODE_INSTRUCTIONS = """
-You are a financial analyst creating a higher-level summary from multiple section summaries of an SEC filing.
+You are an expert summarizer helping an AI system navigate a long SEC filing.
+Each of the child nodes below contains a summary of a section in the filing. Your task is to produce a **concise, structured rollup** that enables another agent to decide:
+- Whether to go deeper into this branch of the document
+- Which child sections are most likely to contain query-relevant content
+You are not summarizing the content yourself. You are creating an **index with intelligent signposting** that respects the hierarchical structure of the document.
+--------------------
+<output_format>
+### Overview
+Briefly describe what this parent node covers. Mention the filing section and topical scope.
+Example:
+> This node includes summaries related to JPMorgan’s capital disclosures and liquidity planning, drawn from Item 2 of the Q1 2025 10-Q.
+### Child Summary Tree
+Return an indented tree view of the children and their descendants. For each node:
+- Include the **node ID or title**
+- Provide a short pointer to what content it contains (e.g., disclosures, metrics, commentary)
+- Indent child nodes under their immediate parents using bullet levels to reflect hierarchy
+Format example:
+- [Node ID]: [Top-level topic or summary label]
+- [Child Node ID]: [Subtopic or detail]
+- [Child Node ID]: [Subtopic or detail]
+- [Sibling Node ID]: [Different topic]
 
-Each child section has already been summarized. Your task is to **build a sparse but high-fidelity overview** by:
-- Identifying **common themes or trends across children**
-- Extracting **material or standout disclosures**
-- Referring to child nodes for detailed points, rather than repeating them
-
-### Guidelines:
-- Do not summarize every child
-- Do not merge or paraphrase summaries without attribution
-- **If a child has no standout content, skip it**
-- Use section names or IDs to trace insight origin (e.g., "See Section 1B for forward-looking commentary")
-
-### Format:
-- Group findings under thematic headings
-- Include 1-3 bullets from relevant children
-- Use pointers instead of repeating full content (e.g., “See Child: 1B for litigation details”)
-
-Do not add new information. Do not speculate.
-Only return a structured summary.
-
+Do not fabricate hierarchy — only reflect the actual parent-child relationships in {children_info}.
+--------------------
+<rules>
+- Preserve all child nodes and their hierarchy. Do NOT omit any node.
+- Do NOT paraphrase child summaries. Only describe what's in them.
+- Do NOT filter based on perceived materiality or importance.
+- If a child is routine or unchanged, say so explicitly (e.g., “Unchanged risk language from prior filing”).
 <children_info>
 {children_info}
 </children_info>
+
 """
 
     def __init__(self, llm_provider: ILLMProvider):
@@ -119,13 +129,15 @@ Only return a structured summary.
     ) -> MemoryTreeNode:
         children_memories: List[MemoryTreeNode] = []
         total_content: List[str] = []
-        for root_node in tree:
-            # Process each root node and its children
-            memory_tree, raw_content = await self._create_document_structure(
-                root_node, metadata
-            )
-            children_memories.append(memory_tree)
-            total_content.append(raw_content)
+        async with ProgressTracker(len(list(tree.nodes))) as tracker:
+            tasks = [
+                self._create_document_structure(root_node, metadata, tracker)
+                for root_node in tree
+            ]
+            results = await asyncio.gather(*tasks)
+            for memory_tree, raw_content in results:
+                children_memories.append(memory_tree)
+                total_content.append(raw_content)
 
         if len(children_memories) == 1:
             return children_memories[0]
@@ -214,7 +226,7 @@ Only return a structured summary.
         return docs
 
     async def _create_document_structure(
-        self, node: sp.TreeNode, metadata: SECFiling
+        self, node: sp.TreeNode, metadata: SECFiling, tracker: ProgressTracker
     ) -> Tuple[MemoryTreeNode, str]:
         if not node:
             return None, ""
@@ -224,7 +236,8 @@ Only return a structured summary.
 
         # Create a list of coroutine objects and gather results
         tasks = [
-            self._create_document_structure(child, metadata) for child in node.children
+            self._create_document_structure(child, metadata, tracker)
+            for child in node.children
         ]
         results = await asyncio.gather(*tasks)
         for child_mem, child_content in results:
@@ -271,6 +284,7 @@ Only return a structured summary.
                 node_type=node_type,
                 metadata=node_metadata,
             )
+            await tracker.step()
             return current_node, node_content
 
         mega_summaries = self._construct_summaries(children_memories, node_content)
@@ -289,6 +303,7 @@ Only return a structured summary.
             metadata=node_metadata,
             children=children_memories,
         )
+        await tracker.step()
         return current_node, mega_summaries
 
     def _construct_summaries(

@@ -1,4 +1,7 @@
+import asyncio
 from pathlib import Path
+
+from tqdm import tqdm
 
 
 def find_project_root(start: Path = None, markers=("pyproject.toml", ".git")):
@@ -7,3 +10,22 @@ def find_project_root(start: Path = None, markers=("pyproject.toml", ".git")):
         if any((p / marker).exists() for marker in markers):
             return p
     raise FileNotFoundError(f"Could not find project root (markers: {markers})")
+
+
+class ProgressTracker:
+    def __init__(self, total: int):
+        self.total = total
+        self.visited = 0
+        self.lock = asyncio.Lock()
+        self.tqdm_bar = None
+
+    async def step(self):
+        async with self.lock:
+            self.tqdm_bar.update(1)
+
+    async def __aenter__(self):
+        self.tqdm_bar = tqdm(total=self.total, desc="Processing nodes")
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.tqdm_bar.close()

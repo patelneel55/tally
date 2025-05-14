@@ -38,15 +38,41 @@ class SummarizerTool(BaseTool):
     _TOOL_DESCRIPTION: ClassVar[str] = "Summarizes text"
 
     _TABLE_SUMMARIZER_PROMPT = """
-You are an expert financial analyst tasked with summarizing sections of SEC filings.
-Your goal is to create a concise yet comprehensive summary of the following text provided in the <input_query> tag.
-The summary should capture key facts, figures and GIST of the information presented.
-It will be used by another AI agent to understand the content of this segment and decide if its relevant to a user's query.
-Focus on the factual information and avoid interpretation or inference beyond what is stated.
+You are an expert financial analyst summarizing SEC filing segments.
+
+Your job is to create a **structured, discriminative summary** of the content inside the <input_query> tag. This summary will be used by another AI agent to decide whether to further explore this section or not. Your task is **not abstraction**, but **indexing**: surface key facts, metrics, and disclosures that could help downstream tools answer user queries.
+
+You MUST follow the format below. If any section is missing in the input, leave that section out.
+
+--------------------
+<output_format>
+### Section Metadata
+- Ticker: [e.g., JPM]
+- Filing: [e.g., 10-Q for Q1 2025]
+- Section: [e.g., MD&A: Liquidity and Capital Resources]
+
+### Topics Covered
+- [Short phrases like "Net interest income", "CRE risk", "Share repurchases"]
+
+### Key Metrics & Facts
+- [Example: Net interest income: $23.3B (+1% QoQ)]
+- [Example: CET1 ratio: 15.4% (unchanged)]
+- [Example: Provision for credit losses: $3.3B]
+
+### Regulatory / Strategic Commentary
+- [Mention any commentary, guidance, regulation, lawsuits, etc.]
+- [If no such commentary is present, omit this section]
+
+### Table References (if applicable)
+- Table: [name or content type, e.g., "Allowance Rollforward", "Capital Ratios"]
+- Includes: [brief summary of rows or time periods]
+</output_format>
+--------------------
 
 <rules>
-- If the input has a table, solely follow the instructions using the <table_instructions> tag for the table and ignore other rules apart from the <custom_instructions> tag if provided.
-- If custom instructions are provided using the <custom_instructions> tag, ignore all other rules and follow the custom instructions.
+- Do NOT infer or speculate. Only use content provided.
+- If <custom_instructions> is present, follow that and ignore other rules.
+- If <table_instructions> is present, follow it precisely for tables.
 </rules>
 
 
@@ -84,15 +110,6 @@ Return a markdown-style bullet list:
 Do not compress or analyze. Your job is to faithfully summarize the content and structure of the table node for downstream retrieval.
 </final_instruction>
 </table_instructions>
-
-
-<task>
-Your job is to accurately reflect what topics and disclosures appear in the children. This index helps downstream systems decide where to search for relevant information.
-
-You are summarizing real financial document content, not intermediate outputs
-Your job is faithful representation, not abstraction
-Think like an indexing layer—downstream tools will rely on this node to decide whether to go deeper or collect here
-</task>
 
 <input_query>
 {input}
@@ -137,7 +154,7 @@ Think like an indexing layer—downstream tools will rely on this node to decide
         return self._llm_instance
 
     async def execute(self, **kwargs) -> str:
-        logger.info(f"📌 TOOL EXECUTION: {self.name}")
+        logger.debug(f"📌 TOOL EXECUTION: {self.name}")
         try:
             llm = self._llm()
 
@@ -164,7 +181,7 @@ Think like an indexing layer—downstream tools will rely on this node to decide
             if not isinstance(summary, str):  # Final check
                 summary = ""
 
-            logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
+            logger.debug(f"✅ TOOL COMPLETED: {self.name} successfully")
             return summary.strip()
 
         except Exception as e:

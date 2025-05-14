@@ -140,12 +140,14 @@ You MUST provide your response as a JSON object that strictly conforms to the fo
 
 Guidelines for Decision Making:
 - Relevance: Always prioritize paths and information most relevant to the user query.
-- Specificity: If `explore_children` is chosen, select only the children IDs that are most likely to lead to the answer.
-- Sufficiency for `answer_here`: Only choose `answer_here` if the current node's content itself is sufficient to answer either the whole query or part of the query and the current node has no children, else continue exploring children
+- Breadth over narrowness: If multiple children contain partial, complimentary or thematically related content that could contribute to answering the query, select multiple of them. Do NOT over-prune to only one unless you're highly confident it's vastly more relevant.
+- Specificity for `explore_children`: Select **all** children IDs that are most likely to contain **any** portion of the answer to the user's query.
+- Sufficiency for `answer_here`: Only choose `answer_here` if the current node's content can answer a part of the user's query and the current node has no children, else continue exploring children
 - Sufficiency for `deadend`: Before answering `deadend`, make sure that the node has no relevance to the query. Even if the node partially answers the query or if there's even a slight chance that one of the children can answer the question partially. It should explore the children or use it as the answer. If the query had to be relevant to any of the children, and you had to pick a child, pick one as long as confidence is above 0.0
 - Relevance for `deadend`: Before answering `deadend`, think about what kind of document this is. If you think the user's query can be partially answered in such a document and there is chance that the children have the answer, NEVER make the decision of a `deadend`. It's CHEAPER to navigate the children if the decision is wrong rather than saying `deadend` and in actuality the children have the answer. It will lead to CATASTROPHE if you pick `deadend` too early. So be absolutely certain!
 - Reasoning is Key: Your `reasoning` should clearly justify your `decision`.
 - Confidence: Reflect your certainty in the decision.
+- The section under <working_memory> refers to the memory of the decision tree traversal. USE that as guidance on the memory until now
 """
     _MEMWALKER_HUMAN_PROMPT = """
 **Overall User Query:**
@@ -173,6 +175,10 @@ If there are no children, provided an empty list `[]`.
 <custom_instructions>
 {custom_instructions}
 </custom_instructions>
+
+<working_memory>
+{working_memory}
+</working_memory>
 
 Based on the system instructions, the overall user query, and the current context provided above, please analyze the information and provide your navigation decision in the specified JSON format.
 """
@@ -312,64 +318,6 @@ The following chosen children IDs do not have the information to answer the user
         Returns a list of context snippets associated with the query
         """
         return await self._navigate_recurse(query, root_node)
-        # collected_context: List[SummaryContext] = []
-        # navigation_log: List[NavigationLogStep] = []
-        # visited_nodes: Set[MemoryTreeNode] = set()
-        # llm_calls = 0
-
-        # stack: List[MemoryTreeNode] = [root_node]
-
-        # while stack and llm_calls < self.max_llm_calls:
-        #     current_node = stack.pop()
-        #     if current_node in visited_nodes:
-        #         continue
-        #     visited_nodes.add(current_node)
-
-        #     child_summaries = self._get_child_summaries(current_node)
-        #     decision = await self.make_navigation_decision(
-        #         query=query,
-        #         current_node=current_node,
-        #         child_summaries=child_summaries,
-        #     )
-        #     llm_calls += 1
-        #     if decision.decision == DecisionType.ExploreChildren:
-        #         action_log_children = []
-        #         # Add child nodes to the stack for further exploration
-        #         if decision.next_children_ids:
-        #             for child_id in reversed(decision.next_children_ids):
-        #                 child_node = self._get_child_by_id(current_node, child_id)
-        #                 if child_node and child_node not in visited_nodes:
-        #                     stack.append(child_node)
-        #                     action_log_children.append(child_node.id)
-        #     elif decision.decision == DecisionType.AnswerHere:
-        #         # Collect the current node's content
-        #         collected_context.append(
-        #             SummaryContext(
-        #                 node_id=current_node.id,
-        #                 summary_text=current_node.summary,
-        #                 reasoning=decision.reasoning,
-        #                 confidence=decision.confidence,
-        #             )
-        #         )
-        #     elif decision.decision == DecisionType.DeadEnd:
-        #         # If its a deadend, we should backtrack
-        #         pass
-        #     else:
-        #         logger.warning(f"Unknown decision from LLM: {decision.decision}")
-
-        #     navigation_log.append(
-        #         NavigationLogStep(
-        #             step=len(navigation_log) + 1,
-        #             visited_node_id=current_node.id,
-        #             visited_node_summary=current_node.summary,
-        #             llm_decision=decision,
-        #         )
-        #     )
-
-        # return Output(
-        #     collected_context=collected_context,
-        #     navigation_log=navigation_log,
-        # )
 
     def _get_child_summaries(self, parent_node: MemoryTreeNode) -> List[Dict[str, str]]:
         child_summaries_map = []
@@ -387,7 +335,7 @@ The following chosen children IDs do not have the information to answer the user
         self, parent_node: MemoryTreeNode, child_id: str
     ) -> Optional[MemoryTreeNode]:
         for child in parent_node.children:
-            if child.id == child_id:
+            if child.id == child_id or child.id.startswith(child_id):
                 return child
         return None
 
@@ -407,6 +355,7 @@ The following chosen children IDs do not have the information to answer the user
         current_node: MemoryTreeNode,
         child_summaries: List[Dict[str, str]],
         custom_instructions: str = "",
+        memory=None,
     ) -> NavigationDecision:
         llm = self._llm().with_structured_output(NavigationDecision)
         prompt = self.prompt_template.format_prompt(
@@ -415,6 +364,7 @@ The following chosen children IDs do not have the information to answer the user
             current_node_summary=current_node.summary,
             children_info=json.dumps(child_summaries),
             custom_instructions=custom_instructions,
+            working_memory=json.dumps(memory),
         )
         response: NavigationDecision = await llm.ainvoke(prompt)
         return response

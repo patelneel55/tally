@@ -56,12 +56,12 @@ class OpenAIModels(str, Enum):
             rules={
                 RateLimitType.REQUEST_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.LEAKY_BUCKET,
-                    limit=500,
+                    limit=5000,
                     period=timedelta(minutes=1),
                 ),
                 RateLimitType.TOKEN_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.TOKEN_BUCKET,
-                    limit=30000,
+                    limit=450000,
                     period=timedelta(minutes=1),
                 ),
             },
@@ -73,12 +73,12 @@ class OpenAIModels(str, Enum):
             rules={
                 RateLimitType.REQUEST_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.LEAKY_BUCKET,
-                    limit=500,
+                    limit=5000,
                     period=timedelta(minutes=1),
                 ),
                 RateLimitType.TOKEN_LIMIT.value: RateLimitRule(
                     algorithm=AlgorithmType.TOKEN_BUCKET,
-                    limit=200000,
+                    limit=2000000,
                     period=timedelta(minutes=1),
                 ),
             },

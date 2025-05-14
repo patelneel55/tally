@@ -5473,18 +5473,6 @@ files = [
 anyio = ">=3.0.0"
 
 [[package]]
-name = "weaviate"
-version = "0.1.2"
-description = "A placeholder package for the Weaviate name"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "weaviate-0.1.2-py3-none-any.whl", hash = "sha256:40f1c1cf0b769036315d2b6026c8cd823a3a6e951c90d4e70a001a770ba8a444"},
-    {file = "weaviate-0.1.2.tar.gz", hash = "sha256:a381b8bb0eb236bd10256def8612953ed9024e6738b8a259e7ec11e626ae0665"},
-]
-
-[[package]]
 name = "weaviate-client"
 version = "4.14.3"
 description = "A python native Weaviate client"
@@ -6004,4 +5992,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "5f16f275bd519c6d0469ae3d95030fdf21ff462e93c13f5a17c607548a50ba68"
+content-hash = "c5af84da204bd8b607f0d04efcf6b8acb69cf2a46826bce9805c021c2c6def3f"

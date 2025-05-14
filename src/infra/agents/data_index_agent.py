@@ -36,14 +36,14 @@ Provide clear status updates based on the tool outputs.
                 llm_provider=llm_provider
             ),  # Retrieves the relevant collections that would answer the query
             DataCheckerTool(),  # Checks whether the relevant data exists
-            WebSearchTool(),
             DatabaseSearchTool(),
+            # WebSearchTool(),
             # VectorSearchTool(vector_store=vector_store, embeddings=embedding_provider),
             # # SQLAlchemySearchTool(engine=sqlalchemy_engine),
-            # IndexingPipelineTool(
-            #     vector_store=vector_store,
-            #     embeddings=embedding_provider,
-            # ),
+            IndexingPipelineTool(
+                vector_store=vector_store,
+                embeddings=embedding_provider,
+            ),
         ]
 
         super().__init__(

@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Type
 
 from langchain_text_splitters import MarkdownTextSplitter
 from pydantic import BaseModel, ConfigDict
@@ -9,6 +9,7 @@ from infra.acquisition.models import BaseMetadata
 from infra.acquisition.sec_fetcher import EDGARFetcher, FilingRequest, SECFiling
 from infra.ingestion.web_loader import WebLoader
 from infra.llm.providers import OpenAIProvider
+from infra.pipelines.db_search import DataMiner, SECSearch
 from infra.pipelines.indexing_pipeline import IndexingPipeline
 from infra.preprocessing.sec_parser import SECParser
 from infra.preprocessing.simple_splitters import LangChainTextSplitter
@@ -26,13 +27,21 @@ class CollectionSchema(BaseModel):
     name: str
     description: str
     metadata_model: Type[BaseMetadata]
-    example_queries: Optional[List[str]]
     indexer: IndexingPipeline
     indexer_schema: Type[BaseModel]
     traversal: TraversalType
+    searcher: DataMiner
 
     def json_schema(self) -> str:
-        base = self.model_dump(exclude={"metadata_model", "indexer", "indexer_schema"})
+        base = self.model_dump(
+            exclude={
+                "metadata_model",
+                "indexer",
+                "indexer_schema",
+                "traversal",
+                "searcher",
+            }
+        )
         base["metadata_schema"] = self.metadata_model.model_json_schema()
         return json.dumps(base, indent=2)
 
@@ -67,9 +76,8 @@ def get_schema_registry() -> MetadataSchemaRegistry:
             registry={
                 "SECFilings": CollectionSchema(
                     name="SECFilings",
-                    description="Vector chunks from SEC filings like 10-K, 10-Q, 8-K etc.",
+                    description="Data chunks from SEC filings like 10-K, 10-Q, 8-K etc.",
                     metadata_model=SECFiling,
-                    example_queries=[],
                     indexer=IndexingPipeline(
                         fetcher=EDGARFetcher(),
                         loader=WebLoader(crawl_strategy="all", max_crawl_depth=0),
@@ -78,6 +86,7 @@ def get_schema_registry() -> MetadataSchemaRegistry:
                     ),
                     indexer_schema=FilingRequest,
                     traversal=TraversalType.MEM_WALK,
+                    searcher=SECSearch(),
                 ),
             }
         )

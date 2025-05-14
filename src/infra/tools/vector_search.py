@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 from datetime import date, datetime
 from typing import Any, ClassVar, Dict, List
@@ -44,8 +46,8 @@ class DatabaseSearchTool(BaseTool):
     def __init__(
         self,
         llm_provider: ILLMProvider,
-        vector_store: IVectorStore,
-        embeddings: IEmbeddingProvider,
+        vector_store: IVectorStore = None,
+        embeddings: IEmbeddingProvider = None,
     ):
         super().__init__(
             name=self._TOOL_NAME,
@@ -63,49 +65,22 @@ class DatabaseSearchTool(BaseTool):
             search_query = VectorSearchQuery(**kwargs)
             collection = self._schema_registry.get_collection(search_query.collection)
 
+            output = []
             if collection.traversal == TraversalType.MEM_WALK:
-                # Identify the root tree nodes
-                # Based on the metadata filters, filter the database cache to see
-                # if there are any rows with the necessary hierarchy data
-                # The identifiable information includes ticker, form type
-                # and year/quarter
-
-                # 1. Identify the appropriate table (not sure how to do this)
-                db_table: Cache = None
-                target_date = search_query.filters["filing_date"]
-                target_year = target_date.year
-                target_quarter = (target_date.month - 1) // 3 + 1
-
-                # Get the column attribute dynamically from the model class
-                date_column = getattr(model_class, "filing_date")
-
-                # Construct the SQLAlchemy query using session.query()
-                query = session_obj.query(model_class).filter(
-                    func.extract("year", date_column) == target_year,
-                    func.extract("quarter", date_column) == target_quarter,
+                root_nodes: List[MemoryTreeNode] = (
+                    collection.searcher.nodes_for_mem_walk(search_query.filters)
                 )
-
-                # 2. Once table is identified, make an sql call to retrieve all relevant rows
-                with db_table.query_builder() as q:
-                    root_nodes = q.filter(
-                        func.extract("year", filing_date) == target_year,
-                        func.extract("quarter", filing_date) == target_quarter,
-                    ).all()
-
-                root_nodes: MemoryTreeNode = [
-                    getattr(node, "hierarchy") for node in root_nodes
-                ]
-
-                # 3. Parse all rows
                 mem_walker = MemWalker(llm_provider=self._llm_provider)
-                output = []
-                for root_node in root_nodes:
-                    output.append(
-                        await mem_walker.navigate_tree(search_query, root_node)
-                    )
+                tasks = [
+                    mem_walker.navigate_tree(search_query.query, node)
+                    for node in root_nodes
+                ]
+                output.extend(await asyncio.gather(*tasks))
+            elif collection.traversal == TraversalType.VECTOR_SEARCH:
+                pass
 
             logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
-            return summary.strip()
+            return json.dumps([out.model_dump() for out in output])
         except Exception as e:
             # Catch potential errors from format_prompt or invoke
             logger.error(f"Error during TableSummarizer run: {e}", exc_info=True)
