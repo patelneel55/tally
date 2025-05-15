@@ -2,6 +2,7 @@ import logging
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 from uuid import UUID
+from functools import reduce
 
 import weaviate
 from langchain_core.documents import Document
@@ -11,10 +12,11 @@ from langchain_core.vectorstores import VectorStore
 from langchain_weaviate.vectorstores import WeaviateVectorStore as LCWeaviate
 from pydantic import BaseModel
 from weaviate import WeaviateClient
+import weaviate.classes.query as wvq
 from weaviate.classes.config import DataType, Property
 
 from infra.config.settings import get_settings
-from infra.vector_stores.models import IVectorStore
+from infra.vector_stores.models import IVectorStore, SearchKwargs, FilterValueType, FilterValuesTypeList
 
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,9 @@ class WeaviateVectorStore(IVectorStore):
     def get_vectorstore(self, embeddings: Embeddings) -> VectorStore:
         return self._initialize(embeddings)
 
+    def get_filters():
+        wvc
+
     def add_documents(self, documents: List[Document], embeddings: Embeddings) -> None:
         if not documents:
             logger.warning("No documents to add.")
@@ -97,42 +102,37 @@ class WeaviateVectorStore(IVectorStore):
         self,
         embeddings: Embeddings,
         search_type: str = "similarity",
-        search_kwargs: Optional[Dict[str, Any]] = None,
+        search_kwargs: Optional[SearchKwargs] = None,
     ) -> BaseRetriever:
         logger.info(
             f"Creating retriever for Weaviate collection '{self._collection_name}' with search_type '{search_type}'..."
         )
         try:
             vs = self.get_vectorstore(embeddings)
-            weaviate_search_kwargs = {"k": search_kwargs.get("k", 10)}
-            # if "filter" in search_kwargs:
-            #     weaviate_search_kwargs["where"] = self.convert_metadata_to_where_clause(search_kwargs.get("filter"))
+            search_kwargs = search_kwargs or SearchKwargs()
+            weaviate_kwargs = {"k": search_kwargs.k}
+            if search_kwargs.filters:
+                weaviate_kwargs["filter"] = self._convert_filters_to_where_clause(search_kwargs.filters)
             return vs.as_retriever(
-                search_type=search_type, search_kwargs=weaviate_search_kwargs
+                search_type=search_type, search_kwargs=weaviate_kwargs
             )
         except Exception as e:
             raise RuntimeError(f"Failed to create retriever: {str(e)}") from e
 
-    def convert_metadata_to_where_clause(self, metadata: dict) -> dict:
+    def _convert_filters_to_where_clause(self, filters: Dict[str, FilterValueType]):
         """Convert metadata filter to Weaviate v4.x where filter format."""
-        # In Weaviate v4.x, filters use a different structure
-        where_filter = {}
-
-        for key, value in metadata.items():
-            # Handle different value types
-            if isinstance(value, str):
-                where_filter[key] = {"$eq": value}
-            elif isinstance(value, (int, float)):
-                where_filter[key] = {"$eq": value}
-            elif isinstance(value, bool):
-                where_filter[key] = {"$eq": value}
-            elif isinstance(value, list):
-                where_filter[key] = {"$in": value}
+        if not filters:
+            return None
+        
+        weaviate_filter_conditions = []
+        for prop_name, prop_value in filters.items():
+            prop_filter_builder = wvq.Filter().by_property(prop_name)
+            if isinstance(prop_value, FilterValuesTypeList):
+                weaviate_filter_conditions.append(prop_filter_builder.contains_any(prop_value))
             else:
-                # Default to string equality for other types
-                where_filter[key] = {"$eq": str(value)}
+                weaviate_filter_conditions.append(prop_filter_builder.equal(prop_value))
 
-        return where_filter
+        return reduce(lambda a, b: a & b, weaviate_filter_conditions)
 
     def set_collection(self, name: str, metadata: Dict):
         self._collection_name = name

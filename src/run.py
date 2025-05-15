@@ -6,16 +6,18 @@ import time
 
 import langchain
 from langchain.callbacks.base import BaseCallbackHandler
+from langchain.callbacks import FileCallbackHandler, StdOutCallbackHandler
 
 from infra.collections.registry import get_schema_registry
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
 from infra.pipelines.mem_walker import MemoryTreeNode, MemWalker
-from infra.tools.vector_search import DatabaseSearchTool, VectorSearchQuery
+from infra.tools.database_search import DatabaseSearchTool, VectorSearchQuery
 from infra.utils import ProgressTracker
+from infra.agents.retrieval_agent import RetrievalAgent
 
-
-# from infra.vector_stores.weaviate import WeaviateVectorStore
+from infra.vector_stores.weaviate import WeaviateVectorStore
+from langgraph.graph.graph import CompiledGraph
 
 
 class CaptureFullPromptHandler(BaseCallbackHandler):
@@ -34,61 +36,6 @@ if __name__ == "__main__":
     # langchain.debug = True
 
     async def run():
-        # vector_store = WeaviateVectorStore()
-        # embeddings = OpenAIEmbeddingProvider()
-        # agent = DataIndexAgent(
-        #     llm_provider=OpenAIProvider(),
-        #     vector_store=vector_store,
-        #     embedding_provider=embeddings,
-        # )
-        # # agent = MathAgent(llm_provider=OpenAIProvider())
-        # workflow: CompiledGraph = agent.build_agent()
-        # callback = StdOutCallbackHandler()
-
-        # result = workflow.invoke(
-        #     {
-        #         "messages": [
-        #             {
-        #                 "role": "user",
-        #                 "content": "What were JPM's comment's about commercial real estate looking forward in 2024?",
-        #                 # "content": "Today's date is April 23rd 2025. What is the net income of Google (GOOG) in 2022?",
-        #                 # "content": "Sarah has 15 apples. She buys 8 more apples at the store. Then, she gives 5 apples to her friend Tom. How many apples does Sarah have left?",
-        #             }
-        #         ]
-        #     },
-        #     # config={"configurable": {"thread_id": 42}}
-        #     # {"messages": [{"role": "user", "content": "Sarah has 15 apples. She buys 8 more apples at the store. Then, she gives 5 apples to her friend Tom. How many apples does Sarah have left?"}]},
-        #     # config={"callbacks": [CaptureFullPromptHandler(), callback]},
-        # )
-        # print(result)
-        search_tool = DatabaseSearchTool(llm_provider=OpenAIProvider())
-
-        async def run_case(ticker, case, answer, tracker):
-            start = time.perf_counter()
-            output_str = await search_tool.execute(
-                **VectorSearchQuery(
-                    query=case,
-                    justification="Why not?",
-                    collection="SECFilings",
-                    filters={
-                        "ticker": ticker,
-                        "formType": "10-Q",
-                    },
-                ).model_dump()
-            )
-            end = time.perf_counter()
-            await tracker.step()
-            output = json.loads(output_str)
-            output["case"] = case
-            output["duration"] = f"{end - start:.4f}"
-            # if not answer:
-            #     return output
-
-            # # Verify whether the response matches the answer
-            # context = output["collected_context"]
-
-            return output
-
         test_cases = {
             "AAPL": [
                 ("What is the operating income for six month ended march 2025?", None),
@@ -122,9 +69,38 @@ if __name__ == "__main__":
                 ("What were the product updates announced this quarter?", None),
             ],
             "JPM": [
+                ("What were JPM's comment's about commercial real estate looking forward in 2024?", None)
                 # ("What business segments contributed most to noninterest revenue?", None),
             ],
         }
+        
+        vector_store = WeaviateVectorStore()
+        embeddings = OpenAIEmbeddingProvider()
+        agent = RetrievalAgent(
+            llm_provider=OpenAIProvider(),
+            vector_store=vector_store,
+            embedding_provider=embeddings,
+        )
+        workflow: CompiledGraph = agent.build_agent()
+        callback = StdOutCallbackHandler()
+        
+
+        async def run_case(ticker, case, answer, tracker):
+            start = time.perf_counter()
+            await workflow.ainvoke(
+                {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": case,
+                        }
+                    ]
+                },
+                config={"callbacks": [FileCallbackHandler(filename=f"cache/{ticker}_{hash(case)}")]},
+            )
+            end = time.perf_counter()
+            await tracker.step()
+            return case, f"{end - start:.4f}"
 
         flattened = [
             (ticker, case, answer)
@@ -138,34 +114,9 @@ if __name__ == "__main__":
             ]
             results = await asyncio.gather(*tasks)
 
-        with open("cache/retrieval_testing.json", "w") as f:
-            json.dump(results, f, indent=2)
-
-        logging.basicConfig(level=logging.INFO)
-        search_tool = DatabaseSearchTool(llm_provider=OpenAIProvider())
-        output_str = await search_tool.execute(
-            **VectorSearchQuery(
-                query="What is the latest buyback authorization?",
-                justification="Why not?",
-                collection="SECFilings",
-                filters={
-                    "ticker": "AAPL",
-                    "formType": "10-Q",
-                },
-            ).model_dump()
-        )
-        with open("cache/output.json", "w") as f:
-            f.write(output_str)
-
-        # logging.basicConfig(level=logging.DEBUG)
-        # collection = get_schema_registry().get_collection("SECFilings")
-        # collection.indexer.embedding_provider = OpenAIEmbeddingProvider()
-        # # collection.indexer.vector_store = WeaviateVectorStore(index_name="SECFilings")
-        # await collection.indexer.run(
-        #     **{
-        #         "identifier": ["AAPL"],
-        #         "filing_type": "10-Q",
-        #     }
-        # )
+        with open("cache/retrieval_metrics.json", "w") as f:
+            for case, duration in results:
+                f.write(f"Case: {case}\n")
+                f.write(f"Duration: {duration}")
 
     sys.exit(asyncio.run(run()))

@@ -20,6 +20,10 @@ class DataMiner(ABC):
         pass
 
     @abstractmethod
+    def data_exists(filters: Dict[str, Any]) -> List[MemoryTreeNode]:
+        pass
+
+    @abstractmethod
     def nodes_for_mem_walk(filters: Dict[str, Any]) -> List[MemoryTreeNode]:
         pass
 
@@ -28,6 +32,26 @@ class SECSearch(DataMiner):
     def __init__(self):
         pass
 
+    def data_exists(self, filters) -> Tuple[bool, str, str]:
+        hierarchy_table = Cache(
+            get_sqlalchemy_engine(),
+            TableNames.SECFilingHierarchy.value,
+        )
+        db_filters = self._db_filters_from_metadata(hierarchy_table, filters)
+        with hierarchy_table.query_builder() as q:
+            nodes = q.filter(*db_filters).all()
+            if len(nodes) == 0:
+                return False, "NOT_FOUND", "No data was found matching the specified criteria in the database."
+
+            exists = True
+            for node in nodes:
+                indexing_status = getattr(node, "status")
+                if indexing_status == "in-progress":
+                    exists = False
+            if not exists:
+                return exists, "INDEXING_IN_PROGRESS", "The data relevant to the query is currently being indexed and is not yet available. Please try again later."
+            return exists, "SUCCESS", "The data relevant to the query is found"
+
     def nodes_for_mem_walk(self, filters) -> List[MemoryTreeNode]:
         # Convert filters to query the database
         hierarchy_table = Cache(
@@ -35,6 +59,7 @@ class SECSearch(DataMiner):
             TableNames.SECFilingHierarchy.value,
         )
         db_filters = self._db_filters_from_metadata(hierarchy_table, filters)
+        db_filters.append(getattr(hierarchy_table.get_model(), "status") == "complete")
         with hierarchy_table.query_builder() as q:
             root_nodes = q.filter(*db_filters).all()
             return [

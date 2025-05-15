@@ -1,11 +1,23 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, Sequence
+from pydantic import BaseModel, Field
+from datetime import datetime
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
 
+FilterValuesTypeList = Union[
+    Sequence[str], Sequence[bool], Sequence[float], Sequence[int], Sequence[datetime]
+]
+FilterValueType = Union[
+    int, float, str, bool, datetime, None, FilterValuesTypeList
+]
+
+class SearchKwargs(BaseModel):
+    k: int = Field(10, description="Top k objects to be returned")
+    filters: Dict[str, FilterValueType] = Field(None, description="The filters to apply on the semantic vector search")
 
 class IVectorStore(ABC):
     """Interface for interacting with vector databases."""
@@ -56,7 +68,7 @@ class IVectorStore(ABC):
         self,
         embeddings: Embeddings,
         search_type: str = "similarity",
-        search_kwargs: Optional[Dict[str, Any]] = None,
+        search_kwargs: Optional[SearchKwargs] = None,
     ) -> BaseRetriever:
         """
         Returns a LangChain retriever configured for this vector store.
