@@ -51,7 +51,24 @@ class SearchOutput(BaseModel):
 
 class DatabaseSearchTool(BaseTool):
     _TOOL_NAME: ClassVar[str] = "database_search"
-    _TOOL_DESCRIPTION: ClassVar[str] = ""
+    _TOOL_DESCRIPTION: ClassVar[str] = """
+Use this tool to search for specific financial documents (like SEC filings or earnings reports) or
+structured financial data within a pre-identified internal financial database collection.
+This tool is ideal when you know which specific internal collection to query (often determined by the route_query_to_collections) and
+need to apply precise filters to find exact information. It can retrieve data, indicate if data is not found, or report if relevant data is currently being indexed.
+
+When to Use:
+
+After identifying a specific internal financial data collection to target.
+When the query asks for specific financial documents or data points for a known company, document type, reporting period, or date range.
+To retrieve detailed records from internal, curated financial datasets.
+
+Expected Output:
+
+If data is found: A JSON object with status: "SUCCESS", a message, and a results array containing the retrieved financial documents or data records, along with their metadata (e.g., title, source, URL/path).
+If data is NOT found: A JSON object with status: "NOT_FOUND", a message explaining that no data matched the criteria, and details of the query_executed.
+If relevant data is currently being indexed: A JSON object with status: "INDEXING_IN_PROGRESS", a message, details of the query_executed
+"""
 
     def __init__(
         self,
@@ -117,10 +134,11 @@ class DatabaseSearchTool(BaseTool):
                 embeddings=embeddings,
                 search_kwargs=search_kwargs
             )
-            documents = await retriever.ainvoke(search_query.query) 
+            documents = await retriever.ainvoke(search_query.query)
+            search_output.results = documents
 
             logger.info(f"✅ TOOL COMPLETED: {self.name} successfully")
-            return json.dumps([out.model_dump() for out in documents])
+            return json.dumps(search_output.model_dump())
         except Exception as e:
             # Catch potential errors from format_prompt or invoke
             logger.error(f"Error during TableSummarizer run: {e}", exc_info=True)
