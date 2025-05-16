@@ -229,6 +229,7 @@ Do not fabricate hierarchy — only reflect the actual parent-child relationship
         self, node: sp.TreeNode, metadata: SECFiling, tracker: ProgressTracker
     ) -> Tuple[MemoryTreeNode, str]:
         if not node:
+            await tracker.step()
             return None, ""
 
         children_memories: List[MemoryTreeNode] = []
@@ -253,6 +254,7 @@ Do not fabricate hierarchy — only reflect the actual parent-child relationship
             child_memory.content = (
                 node.semantic_element.text.strip() + "\n\n" + child_memory.content
             )
+            await tracker.step()
             return child_memory, child_memory.content
 
         if isinstance(node.semantic_element, sp.TableElement):

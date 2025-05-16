@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 
+from infra.collections.models import HierarchyMetadata
 from infra.collections.registry import TraversalType, get_schema_registry
 from infra.databases.cache import Cache
 from infra.embeddings.models import IEmbeddingProvider
@@ -15,7 +16,6 @@ from infra.llm.models import ILLMProvider
 from infra.pipelines.mem_walker import MemoryTreeNode, MemWalker
 from infra.tools.models import BaseTool
 from infra.vector_stores.models import IVectorStore, SearchKwargs
-from infra.collections.models import HierarchyMetadata
 
 
 # Set up logging
@@ -36,12 +36,14 @@ class VectorSearchQuery(BaseModel):
     collection: str = Field(..., description="Collection name of the vector database")
     filters: Dict[str, Any] = Field(
         ...,
-        description="Filter criteria for document metadata retrieval. Only provide values if absolutely sure and necessary",
+        description="REQUIRED: Filter criteria for document metadata retrieval. Only provide values if absolutely sure and necessary",
     )
+
 
 class TargetQueryInfo(BaseModel):
     collection_searched: str
     filters_applied: Dict[str, Any]
+
 
 class SearchOutput(BaseModel):
     status: str = Field("")
@@ -49,9 +51,12 @@ class SearchOutput(BaseModel):
     query_executed: TargetQueryInfo = Field(...)
     results: List[BaseModel] = Field(default_factory=list)
 
+
 class DatabaseSearchTool(BaseTool):
     _TOOL_NAME: ClassVar[str] = "database_search"
-    _TOOL_DESCRIPTION: ClassVar[str] = """
+    _TOOL_DESCRIPTION: ClassVar[
+        str
+    ] = """
 Use this tool to search for specific financial documents (like SEC filings or earnings reports) or
 structured financial data within a pre-identified internal financial database collection.
 This tool is ideal when you know which specific internal collection to query (often determined by the route_query_to_collections) and
@@ -62,6 +67,17 @@ When to Use:
 After identifying a specific internal financial data collection to target.
 When the query asks for specific financial documents or data points for a known company, document type, reporting period, or date range.
 To retrieve detailed records from internal, curated financial datasets.
+
+You must specify:
+- `query` (str): A semantic search query. Rephrase the user's question into a concise, vector-searchable phrase.
+- `justification` (str): Explain briefly why this query helps answer the user's question.
+- `collection` (str): The name of the internal collection to search. This is typically given by the query router.
+- `filters` (dict) [REQUIRED]: Metadata constraints to narrow the search. You must infer appropriate values from the user query, the accepted fields schema are given with the collection information. Some examples include:
+    • `ticker`: The stock symbol (e.g., "AAPL")
+    • `formType`: Document type (e.g., "10-Q", "10-K")
+    • Other metadata keys may apply based on the collection json schema
+
+IMPORTANT: The `filters` MUST follow the schema retrieved by the route_query_to_collections tool output. This is to ENSURE that the tool doesn't fail. WITHOUT following the schema
 
 Expected Output:
 
@@ -94,11 +110,13 @@ If relevant data is currently being indexed: A JSON object with status: "INDEXIN
             search_output = SearchOutput(
                 query_executed=TargetQueryInfo(
                     collection_searched=collection.name,
-                    filters_applied=search_query.filters
+                    filters_applied=search_query.filters,
                 )
             )
 
-            exists, status, reason = collection.searcher.data_exists(search_query.filters)
+            exists, status, reason = collection.searcher.data_exists(
+                search_query.filters
+            )
             search_output.status = status
             search_output.message = reason
             if not exists:
@@ -122,17 +140,14 @@ If relevant data is currently being indexed: A JSON object with status: "INDEXIN
                 ]
                 node_ids = [r.node_id for r in results]
                 search_kwargs.k = 100
-                search_kwargs.filters = {
-                    "node_ids": node_ids
-                }
-            
+                search_kwargs.filters = {"node_ids": node_ids}
+
             embeddings = self._embeddings.get_embedding_model()
             self._vector_store.set_collection(
                 search_query.collection, search_query.filters
             )
             retriever = self._vector_store.as_retriever(
-                embeddings=embeddings,
-                search_kwargs=search_kwargs
+                embeddings=embeddings, search_kwargs=search_kwargs
             )
             documents = await retriever.ainvoke(search_query.query)
             search_output.results = documents

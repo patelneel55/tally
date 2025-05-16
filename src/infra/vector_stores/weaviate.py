@@ -1,10 +1,11 @@
 import logging
 from datetime import date, datetime
+from functools import reduce
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 from uuid import UUID
-from functools import reduce
 
 import weaviate
+import weaviate.classes.query as wvq
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
@@ -12,11 +13,15 @@ from langchain_core.vectorstores import VectorStore
 from langchain_weaviate.vectorstores import WeaviateVectorStore as LCWeaviate
 from pydantic import BaseModel
 from weaviate import WeaviateClient
-import weaviate.classes.query as wvq
 from weaviate.classes.config import DataType, Property
 
 from infra.config.settings import get_settings
-from infra.vector_stores.models import IVectorStore, SearchKwargs, FilterValueType, FilterValuesTypeList
+from infra.vector_stores.models import (
+    FilterValuesTypeList,
+    FilterValueType,
+    IVectorStore,
+    SearchKwargs,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -78,9 +83,6 @@ class WeaviateVectorStore(IVectorStore):
     def get_vectorstore(self, embeddings: Embeddings) -> VectorStore:
         return self._initialize(embeddings)
 
-    def get_filters():
-        wvc
-
     def add_documents(self, documents: List[Document], embeddings: Embeddings) -> None:
         if not documents:
             logger.warning("No documents to add.")
@@ -112,7 +114,9 @@ class WeaviateVectorStore(IVectorStore):
             search_kwargs = search_kwargs or SearchKwargs()
             weaviate_kwargs = {"k": search_kwargs.k}
             if search_kwargs.filters:
-                weaviate_kwargs["filter"] = self._convert_filters_to_where_clause(search_kwargs.filters)
+                weaviate_kwargs["filters"] = self._convert_filters_to_where_clause(
+                    search_kwargs.filters
+                )
             return vs.as_retriever(
                 search_type=search_type, search_kwargs=weaviate_kwargs
             )
@@ -123,12 +127,14 @@ class WeaviateVectorStore(IVectorStore):
         """Convert metadata filter to Weaviate v4.x where filter format."""
         if not filters:
             return None
-        
+
         weaviate_filter_conditions = []
         for prop_name, prop_value in filters.items():
-            prop_filter_builder = wvq.Filter().by_property(prop_name)
-            if isinstance(prop_value, FilterValuesTypeList):
-                weaviate_filter_conditions.append(prop_filter_builder.contains_any(prop_value))
+            prop_filter_builder = wvq.Filter.by_property(prop_name)
+            if isinstance(prop_value, list):
+                weaviate_filter_conditions.append(
+                    prop_filter_builder.contains_any(prop_value)
+                )
             else:
                 weaviate_filter_conditions.append(prop_filter_builder.equal(prop_value))
 

@@ -5,19 +5,19 @@ import sys
 import time
 
 import langchain
-from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks import FileCallbackHandler, StdOutCallbackHandler
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain.callbacks.tracers.stdout import ConsoleCallbackHandler
+from langgraph.graph.graph import CompiledGraph
 
+from infra.agents.retrieval_agent import RetrievalAgent
 from infra.collections.registry import get_schema_registry
 from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.llm.providers import OpenAIProvider
 from infra.pipelines.mem_walker import MemoryTreeNode, MemWalker
 from infra.tools.database_search import DatabaseSearchTool, VectorSearchQuery
 from infra.utils import ProgressTracker
-from infra.agents.retrieval_agent import RetrievalAgent
-
 from infra.vector_stores.weaviate import WeaviateVectorStore
-from langgraph.graph.graph import CompiledGraph
 
 
 class CaptureFullPromptHandler(BaseCallbackHandler):
@@ -38,42 +38,45 @@ if __name__ == "__main__":
     async def run():
         test_cases = {
             "AAPL": [
-                ("What is the operating income for six month ended march 2025?", None),
+                (
+                    "What is the AAPL operating income for six month ended march 2025?",
+                    None,
+                ),
                 # ("How did Apple's net cash position change from September 28, 2024 to March 29, 2025, and what were the primary drivers of that change?", None),
                 # ("List all related information to Apple's liquidity strategy, including cash flow from operations, investing, and financing activities",None),
                 # ("Summarize Apple's liquidity strategy, including cash flow from operations, investing, and financing activities.",None),
-                (
-                    "What were the year-over-year changes in EPS (basic and diluted)?",
-                    None,
-                ),
-                (
-                    "Compare the gross margins for Products vs. Services in Q2 2025",
-                    None,
-                ),
-                (
-                    "List the contingencies that the company has and list the new products for the second quarter",
-                    None,
-                ),
-                (
-                    "How much was the change in foreign currency translation, net of tax YoY?",
-                    None,
-                ),
-                ("List all the ongoing legal proceedings against the company", None),
-                ("How much cash and cash equivalents were held in escrow?", None),
-                ("What is the latest buyback authorization?", None),
-                ("List all exhibits in the document", None),
-                (
-                    "How many vendors represented 10% or more of vendor receivables?",
-                    None,
-                ),
-                ("What were the product updates announced this quarter?", None),
+                # (
+                #     "What were the year-over-year changes in EPS (basic and diluted)?",
+                #     None,
+                # ),
+                # (
+                #     "Compare the gross margins for Products vs. Services in Q2 2025",
+                #     None,
+                # ),
+                # (
+                #     "List the contingencies that the company has and list the new products for the second quarter",
+                #     None,
+                # ),
+                # (
+                #     "How much was the change in foreign currency translation, net of tax YoY?",
+                #     None,
+                # ),
+                # ("List all the ongoing legal proceedings against the company", None),
+                # ("How much cash and cash equivalents were held in escrow?", None),
+                # ("What is the latest buyback authorization?", None),
+                # ("List all exhibits in the document", None),
+                # (
+                #     "How many vendors represented 10% or more of vendor receivables?",
+                #     None,
+                # ),
+                # ("What were the product updates announced this quarter?", None),
             ],
-            "JPM": [
-                ("What were JPM's comment's about commercial real estate looking forward in 2024?", None)
-                # ("What business segments contributed most to noninterest revenue?", None),
-            ],
+            # "JPM": [
+            #     ("What were JPM's comment's about commercial real estate looking forward in 2024?", None)
+            #     # ("What business segments contributed most to noninterest revenue?", None),
+            # ],
         }
-        
+
         vector_store = WeaviateVectorStore()
         embeddings = OpenAIEmbeddingProvider()
         agent = RetrievalAgent(
@@ -83,10 +86,10 @@ if __name__ == "__main__":
         )
         workflow: CompiledGraph = agent.build_agent()
         callback = StdOutCallbackHandler()
-        
 
         async def run_case(ticker, case, answer, tracker):
             start = time.perf_counter()
+
             await workflow.ainvoke(
                 {
                     "messages": [
@@ -96,7 +99,13 @@ if __name__ == "__main__":
                         }
                     ]
                 },
-                config={"callbacks": [FileCallbackHandler(filename=f"cache/{ticker}_{hash(case)}")]},
+                # config={"callbacks": [FileCallbackHandler(filename=f"cache/{ticker}_{hash(case)}"), callback]},
+                config={
+                    "callbacks": [
+                        ConsoleCallbackHandler(),
+                        FileCallbackHandler(filename=f"cache/{ticker}_{hash(case)}"),
+                    ]
+                },
             )
             end = time.perf_counter()
             await tracker.step()

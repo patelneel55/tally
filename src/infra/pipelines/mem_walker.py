@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import (
@@ -115,17 +115,18 @@ class Output(BaseModel):
 class MemWalker:
     _MEMWALKER_SYSTEM_PROMPT = """
 You are an intelligent agent, "MemWalker," navigating a hierarchical memory tree to find information relevant to a specific user query provided in the <user_query> tag.
-Your task is to analyze the current node and its children, then decide the next best action.
+You are currently at a node in the memory tree. Your task is to analyze this node's content, its children, and the overall query context (including prior memory) to choose the next best action.
 
 **Your Task:**
-Based on the overall user query, the content of the current node, and the summaries of its children (if any), you must make a navigation decision.
 IMPORTANT: You are navigating a financial document like 10-K, 10-Q etc. Any decision you make should consider the overall structure of a financial document and
 think about where the data to answer the user's query can lie when reasoning about possible decisions.
 
 **Decision Options:**
-1.  **`explore_children`**: If the current node is relevant but not specific enough, or if its children seem more promising to answer the query. This option is not valid if there are no children.
-2.  **`answer_here`**: ONLY if the **current node** has no children. If the content of the **current node** directly and sufficiently answers the overall user query and the **current node** has no children, else it should explore the relevant child.
-3.  **`deadend`**: If the current node and its children are not relevant to the query, and this path should be abandoned.
+1.  **`explore_children`**: The current node is relevant but not sufficient. Deeper inspection of child nodes is warranted. This option is not valid if there are no children.
+2.  **`answer_here`**: ONLY if the **current node** has no children. If the content of the **current node** clearly answers a part of the query OR the full query. IMPORTANT: It is sufficient if it only answers a part of the query and it has no children.
+3.  **`deadend`**: If the current node and its children are not relevant to the query, and this path should be abandoned. ONLY chosen when the path is confidently irrelevant.
+
+<
 
 **Output Requirements:**
 You MUST provide your response as a JSON object that strictly conforms to the following structure. The field descriptions from this structure will guide your response:
@@ -203,6 +204,7 @@ Based on the system instructions, the overall user query, and the current contex
         current_node: MemoryTreeNode,
         visited_nodes: Set[MemoryTreeNode] = None,
         llm_calls: int = 0,
+        navigation_so_far: List[NavigationLogStep] = None,
     ) -> Output:
         if visited_nodes is None:
             visited_nodes = set()
@@ -211,12 +213,14 @@ Based on the system instructions, the overall user query, and the current contex
             return Output()
         visited_nodes.add(current_node)
         child_summaries = self._get_child_summaries(current_node)
+        working_memory = self._get_memory_from_navigation(navigation_so_far or [])
 
         logger.info(f"Retrieved child summaries for node {current_node.id}")
         decision = await self.make_navigation_decision(
             query=query,
             current_node=current_node,
             child_summaries=child_summaries,
+            memory=working_memory,
         )
         logger.info(f"LLM decision at node {current_node.id}: {decision.decision}")
 
@@ -253,7 +257,11 @@ Based on the system instructions, the overall user query, and the current contex
                         if child_node and child_node not in visited_nodes:
                             tasks.append(
                                 self._navigate_recurse(
-                                    query, child_node, visited_nodes, llm_calls
+                                    query,
+                                    child_node,
+                                    visited_nodes,
+                                    llm_calls,
+                                    output.navigation_log,
                                 )
                             )
 
@@ -265,6 +273,9 @@ Based on the system instructions, the overall user query, and the current contex
                 if len(output.collected_context) == 0:
                     logger.warning(
                         f"No context gathered from children of node {current_node.id}, retrying with updated decision."
+                    )
+                    working_memory = self._get_memory_from_navigation(
+                        output.navigation_log
                     )
                     new_decision = await self.make_navigation_decision(
                         query=query,
@@ -278,6 +289,7 @@ The following chosen children IDs do not have the information to answer the user
 """.format(
                             children_ids=visited_children
                         ),
+                        memory=working_memory,
                     )
                     step += 1
                     llm_calls += 1
@@ -330,6 +342,16 @@ The following chosen children IDs do not have the information to answer the user
                     }
                 )
         return child_summaries_map
+
+    def _get_memory_from_navigation(
+        self, log: List[NavigationLogStep]
+    ) -> List[Dict[str, Any]]:
+        memory = []
+        for step, navigate in enumerate(log, 1):
+            memory.append(
+                {"step": step, "decision": navigate.llm_decision.model_dump()}
+            )
+        return memory
 
     def _get_child_by_id(
         self, parent_node: MemoryTreeNode, child_id: str
