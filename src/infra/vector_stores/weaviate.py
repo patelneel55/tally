@@ -17,7 +17,6 @@ from weaviate.classes.config import DataType, Property
 
 from infra.config.settings import get_settings
 from infra.vector_stores.models import (
-    FilterValuesTypeList,
     FilterValueType,
     IVectorStore,
     SearchKwargs,
@@ -99,6 +98,15 @@ class WeaviateVectorStore(IVectorStore):
         except Exception as e:
             logger.error(f"Failed to add documents: {str(e)}")
             raise RuntimeError(f"Failed to add documents: {str(e)}") from e
+
+    def delete(self, ids: List[str]) -> None:
+        logger.info(
+            f"Deleting {ids} from Weaviate collection '{self._collection_name}'"
+        )
+        try:
+            self._vectorstore.delete(ids)
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete entries: {str(e)}") from e
 
     def as_retriever(
         self,

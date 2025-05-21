@@ -12,6 +12,15 @@ def find_project_root(start: Path = None, markers=("pyproject.toml", ".git")):
     raise FileNotFoundError(f"Could not find project root (markers: {markers})")
 
 
+def recursive_sort(d):
+    if isinstance(d, dict):
+        return {k: recursive_sort(d[k]) for k in sorted(d)}
+    elif isinstance(d, list):
+        return [recursive_sort(i) for i in d]
+    else:
+        return d
+
+
 class ProgressTracker:
     def __init__(self, total: int):
         self.total = total
