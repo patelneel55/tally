@@ -32,7 +32,7 @@ from infra.acquisition.models import (
 )
 from infra.collections.models import ChunkType
 from infra.config.settings import get_settings
-from infra.databases.cache import Cache
+from infra.databases.cache import SQLAlchemyCache
 from infra.databases.engine import get_sqlalchemy_engine
 from infra.databases.registry import TABLE_SCHEMAS, TableNames
 
@@ -228,7 +228,7 @@ class EDGARFetcher(IDataFetcher):
         self.query_url = "https://api.sec-api.io"
         self.session = None
 
-        self._cache = Cache(
+        self._cache = SQLAlchemyCache(
             get_sqlalchemy_engine(),
             table_name=TableNames.SECFilings.value,
             column_mapping=TABLE_SCHEMAS[TableNames.SECFilings],
@@ -257,26 +257,23 @@ class EDGARFetcher(IDataFetcher):
             request = FilingRequest(**kwargs)
         except ValueError as e:
             raise ValidationError(str(e), field=e.args[1] if len(e.args) > 1 else None)
+
         request_hash = self._cache.generate_id(request.model_dump())
-        cache_entry = self._cache.get(request_hash)
-        filings = pickle.loads(cache_entry["value"]) if cache_entry else None
-        if filings:
-            return filings
+        with self._cache.check(
+            request_hash, get_settings().SEC_API_CACHE_EXPIRATION
+        ) as cctx:
+            if cctx.is_hit and hasattr(cctx.cache_value, "value"):
+                return pickle.loads(cctx.cache_value["value"])
 
-        # Get search query for SEC API
-        search_query = self._build_search_query(request)
-        logger.info(
-            f"Querying SEC API for {request.identifier} filings with payload: {json.dumps(search_query)}"
-        )
+            # Get search query for SEC API
+            search_query = self._build_search_query(request)
+            logger.info(
+                f"Querying SEC API for {request.identifier} filings with payload: {json.dumps(search_query)}"
+            )
 
-        # Fetch filings from SEC API
-        filings_data = await self._fetch_filings_from_api(search_query)
-
-        self._cache.write(
-            request_hash,
-            ttl=get_settings().SEC_API_CACHE_EXPIRATION,
-            value=pickle.dumps(filings_data),
-        )
+            # Fetch filings from SEC API
+            filings_data = await self._fetch_filings_from_api(search_query)
+            cctx.set_value(value=pickle.dumps(filings_data))
         return filings_data
 
     def _build_search_query(self, request: FilingRequest) -> Dict[str, Any]:

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy.sql import ColumnExpressionArgument
 
 from infra.acquisition.sec_fetcher import SECFiling
-from infra.databases.cache import Cache
+from infra.databases.cache import SQLAlchemyCache
 from infra.databases.engine import get_sqlalchemy_engine
 from infra.databases.registry import TableNames
 from infra.pipelines.mem_walker import MemoryTreeNode
@@ -33,7 +33,7 @@ class SECSearch(DataMiner):
         pass
 
     def data_exists(self, filters) -> Tuple[bool, str, str]:
-        hierarchy_table = Cache(
+        hierarchy_table = SQLAlchemyCache(
             get_sqlalchemy_engine(),
             TableNames.SECFilingHierarchy.value,
         )
@@ -41,7 +41,11 @@ class SECSearch(DataMiner):
         with hierarchy_table.query_builder() as q:
             nodes = q.filter(*db_filters).all()
             if len(nodes) == 0:
-                return False, "NOT_FOUND", "No data was found matching the specified criteria in the database."
+                return (
+                    False,
+                    "NOT_FOUND",
+                    "No data was found matching the specified criteria in the database.",
+                )
 
             exists = True
             for node in nodes:
@@ -49,12 +53,16 @@ class SECSearch(DataMiner):
                 if indexing_status == "in-progress":
                     exists = False
             if not exists:
-                return exists, "INDEXING_IN_PROGRESS", "The data relevant to the query is currently being indexed and is not yet available. Please try again later."
+                return (
+                    exists,
+                    "INDEXING_IN_PROGRESS",
+                    "The data relevant to the query is currently being indexed and is not yet available. Please try again later.",
+                )
             return exists, "SUCCESS", "The data relevant to the query is found"
 
     def nodes_for_mem_walk(self, filters) -> List[MemoryTreeNode]:
         # Convert filters to query the database
-        hierarchy_table = Cache(
+        hierarchy_table = SQLAlchemyCache(
             get_sqlalchemy_engine(),
             TableNames.SECFilingHierarchy.value,
         )
@@ -69,7 +77,7 @@ class SECSearch(DataMiner):
             ]
 
     def _db_filters_from_metadata(
-        self, table: Cache, filters: Dict[str, Any]
+        self, table: SQLAlchemyCache, filters: Dict[str, Any]
     ) -> List[ColumnExpressionArgument[bool]]:
         filing_data = SECFiling.model_construct(**filters)
         exprs: List[ColumnExpressionArgument[bool]] = []

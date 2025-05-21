@@ -13,7 +13,7 @@ from sec_parser.processing_steps import SupplementaryTextClassifier
 
 from infra.acquisition.sec_fetcher import SECFiling
 from infra.collections.models import ChunkType, HierarchyMetadata
-from infra.databases.cache import Cache
+from infra.databases.cache import SQLAlchemyCache
 from infra.databases.engine import get_sqlalchemy_engine
 from infra.databases.registry import TABLE_SCHEMAS, TableNames
 from infra.llm.models import ILLMProvider
@@ -86,12 +86,12 @@ Do not fabricate hierarchy — only reflect the actual parent-child relationship
         self.llm_provider = llm_provider
         self.summarizer = SummarizerTool(llm_provider)
 
-        self.summary_cache = Cache(
+        self.summary_cache = SQLAlchemyCache(
             engine=get_sqlalchemy_engine(),
             table_name=TableNames.SECFilingSummary.value,
             column_mapping=TABLE_SCHEMAS[TableNames.SECFilingSummary],
         )
-        self.hierarchy_cache = Cache(
+        self.hierarchy_cache = SQLAlchemyCache(
             engine=get_sqlalchemy_engine(),
             table_name=TableNames.SECFilingHierarchy.value,
             column_mapping=TABLE_SCHEMAS[TableNames.SECFilingHierarchy],
@@ -107,22 +107,21 @@ Do not fabricate hierarchy — only reflect the actual parent-child relationship
         self, content: str, metadata: SECFiling, custom_instructions: str = ""
     ) -> str:
         content_hash = self.summary_cache.generate_id(content)
-        cache_entry = self.summary_cache.get(content_hash)
-        if not cache_entry or not cache_entry["summary"]:
+        with self.summary_cache.check(content_hash) as summary_ctx:
+            if summary_ctx.is_hit and hasattr(summary_ctx.cache_value, "summary"):
+                return summary_ctx.cache_value["summary"]
             summarizer_input = SummarizerInput(
                 input=content, custom_instructions=custom_instructions
             )
             summary = await self.summarizer.execute(**summarizer_input.model_dump())
-            self.summary_cache.write(
-                content_hash,
+            summary_ctx.set_value(
                 ticker=metadata.ticker,
                 filing_type=metadata.formType,
                 filing_date=metadata.filing_date,
                 original_text=content,
                 summary=summary,
             )
-            return summary
-        return cache_entry["summary"]
+        return summary
 
     async def _index_hierarchy(
         self, tree: sp.SemanticTree, metadata: SECFiling
@@ -172,32 +171,31 @@ Do not fabricate hierarchy — only reflect the actual parent-child relationship
         Returns:
             List of Document objects with structured SEC filing data
         """
-        metadata_hash = self.hierarchy_cache.generate_id(metadata.flatten_dict())
-        hierarchy_entry = self.hierarchy_cache.get(metadata_hash)
-
         # If the hierarchy cache exists, retrieve cache instead of re-indexing
         # the document hierarchy
-        if not hierarchy_entry or not hierarchy_entry["document_structure"]:
-            self.hierarchy_cache.write(
-                metadata_hash,
-                ticker=metadata.ticker,
-                filing_type=metadata.formType,
-                filing_date=metadata.filing_date,
-                status="in-progress",
-            )
-            root_tree_node = await self._index_hierarchy(tree, metadata)
-            self.hierarchy_cache.write(
-                metadata_hash,
-                ticker=metadata.ticker,
-                filing_type=metadata.formType,
-                filing_date=metadata.filing_date,
-                status="complete",
-                document_structure=root_tree_node.model_dump(),
-            )
-        else:
-            root_tree_node = MemoryTreeNode.model_validate(
-                hierarchy_entry["document_structure"]
-            )
+        metadata_hash = self.hierarchy_cache.generate_id(metadata.flatten_dict())
+        with self.hierarchy_cache.check(metadata_hash) as h_ctx:
+            if h_ctx.is_hit and hasattr(h_ctx.cache_value, "document_structure"):
+                root_tree_node = MemoryTreeNode.model_validate(
+                    h_ctx.cache_value["document_structure"]
+                )
+            else:
+                self.hierarchy_cache.write(
+                    metadata_hash,
+                    ticker=metadata.ticker,
+                    filing_type=metadata.formType,
+                    filing_date=metadata.filing_date,
+                    status="in-progress",
+                )
+                root_tree_node = await self._index_hierarchy(tree, metadata)
+                h_ctx.set_value(
+                    metadata_hash,
+                    ticker=metadata.ticker,
+                    filing_type=metadata.formType,
+                    filing_date=metadata.filing_date,
+                    status="complete",
+                    document_structure=root_tree_node.model_dump(),
+                )
         write_content_to_file(
             json.dumps(root_tree_node.model_dump()), f"cache/{metadata.ticker}.json"
         )

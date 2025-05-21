@@ -13,7 +13,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from infra.acquisition.models import AcquisitionOutput
-from infra.databases.cache import Cache
+from infra.databases.cache import SQLAlchemyCache
 from infra.databases.engine import get_sqlalchemy_engine
 from infra.databases.registry import TABLE_SCHEMAS, TableNames
 from infra.ingestion.models import IDocumentLoader
@@ -59,7 +59,7 @@ class WebLoader(IDocumentLoader):
             max_requests_per_crawl=max_requests_per_crawl,
             max_crawl_depth=max_crawl_depth,
         )
-        self._cache = Cache(
+        self._cache = SQLAlchemyCache(
             engine=get_sqlalchemy_engine(),
             table_name=TableNames.WebLoader.value,
             column_mapping=TABLE_SCHEMAS[TableNames.WebLoader],

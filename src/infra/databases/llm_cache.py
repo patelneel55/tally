@@ -4,11 +4,13 @@ from typing import Optional
 
 from langchain_core.documents import Document
 
+from infra.databases.cache import SQLAlchemyCache
 from infra.databases.models import Cache
 from infra.embeddings.models import IEmbeddingProvider
-from infra.llm.models import ILLMProvider
+from infra.embeddings.providers import OpenAIEmbeddingProvider
 from infra.utils import recursive_sort
 from infra.vector_stores.models import IVectorStore
+from infra.vector_stores.weaviate import WeaviateVectorStore
 
 
 logger = logging.getLogger(__name__)
@@ -20,8 +22,8 @@ DEFAULT_SEMANTIC_THRESHOLD = 0.9  # Default similarity threshold for semantic ca
 class LLMCache(Cache):
     def __init__(
         self,
-        cache_store: Cache,
-        llm_provider: ILLMProvider,
+        cache_store: SQLAlchemyCache,
+        llm_name: str,
         vector_store: Optional[IVectorStore] = None,
         embedding_provider: Optional[IEmbeddingProvider] = None,
         default_ttl: int = DEFAULT_TTL,
@@ -30,8 +32,10 @@ class LLMCache(Cache):
         enable_semantic_cache: bool = True,
     ):
         self.cache_store = cache_store  # For storing actual LLM responses (exact match or semantic hit payload)
-        self.embedding_provider = embedding_provider
-        self.vector_store = vector_store  # For storing embeddings for semantic search
+        self.embedding_provider = embedding_provider or OpenAIEmbeddingProvider()
+        self.vector_store = (
+            vector_store or WeaviateVectorStore()
+        )  # For storing embeddings for semantic search
 
         self.default_ttl = default_ttl
         self.default_semantic_threshold = default_semantic_threshold
@@ -50,7 +54,7 @@ class LLMCache(Cache):
         )
         if self.enable_semantic_cache:
             logger.debug(f"  Semantic threshold: {self.default_semantic_threshold}")
-        self._llm_provider = llm_provider.get_model().get_name()
+        self._llm_provider = llm_name
 
     def _get_cache_key_metadata(
         self, prompt: str, llm_kwargs: Optional[dict] = None
@@ -111,7 +115,7 @@ class LLMCache(Cache):
         ttl: Optional[int] = None,
         content: str = "",
         llm_kwargs: Optional[dict] = None,
-    ) -> bool:
+    ):
         cache_key = self.cache_store.generate_id(
             self._get_cache_key_metadata(key, llm_kwargs)
         )

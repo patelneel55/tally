@@ -2,10 +2,14 @@ import logging
 from typing import Any
 
 import tiktoken
-from langchain_core.language_models import BaseLanguageModel
+from langchain_core.language_models import BaseLanguageModel, LanguageModelInput
 from langchain_openai import ChatOpenAI
 
 from infra.config.settings import get_settings
+from infra.databases.cache import SQLAlchemyCache
+from infra.databases.engine import get_sqlalchemy_engine
+from infra.databases.llm_cache import LLMCache
+from infra.databases.registry import TABLE_SCHEMAS, TableNames
 from infra.llm.models import ILLMProvider, OpenAIModels, RateLimitType
 
 
@@ -36,8 +40,16 @@ class OpenAIProvider(ChatOpenAI, ILLMProvider):
 
         # These must come after super().__init__ because parent Pydantic will
         # overwrite them
+        self._llm_kwargs = model_kwargs
         self._model = model
         self._max_tokens = max_tokens
+
+        self._cache = SQLAlchemyCache(
+            get_sqlalchemy_engine(),
+            table_name=TableNames.OpenAILLM.value,
+            column_mapping=TABLE_SCHEMAS[TableNames.OpenAILLM],
+        )
+        self._llm_cache = LLMCache(self._cache, llm_name=self.get_name())
 
     def get_model(self) -> BaseLanguageModel:
         return self
@@ -50,13 +62,21 @@ class OpenAIProvider(ChatOpenAI, ILLMProvider):
             enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text)) + self._max_tokens
 
-    async def ainvoke(self, *args, **kwargs) -> Any:
+    async def ainvoke(self, input: LanguageModelInput, *args, **kwargs) -> Any:
         estimated_tokens = self.estimate_tokens(str(args[0]))
-        if self._model.rate_limiter:
-            await self._model.rate_limiter.acquire(
-                [
-                    (RateLimitType.REQUEST_LIMIT.value, 1),
-                    (RateLimitType.TOKEN_LIMIT.value, estimated_tokens),
-                ]
-            )
-        return await super().ainvoke(*args, **kwargs)
+        hash = self._llm_cache.generate_id(input.to_string())
+        with self._llm_cache.check(hash, llm_kwargs=self._llm_kwargs) as ctx:
+            if ctx.is_hit:
+                return ctx.cache_value
+
+            if self._model.rate_limiter:
+                await self._model.rate_limiter.acquire(
+                    [
+                        (RateLimitType.REQUEST_LIMIT.value, 1),
+                        (RateLimitType.TOKEN_LIMIT.value, estimated_tokens),
+                    ]
+                )
+
+            response = await super().ainvoke(input, *args, **kwargs)
+            ctx.set_value(content=response, llm_kwargs=self._llm_kwargs)
+            return response

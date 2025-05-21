@@ -3,7 +3,7 @@ from enum import Enum
 from sqlalchemy import JSON, DateTime, Integer, PickleType, UnicodeText
 from sqlalchemy.orm import mapped_column
 
-from infra.databases.cache import Cache
+from infra.databases.cache import SQLAlchemyCache
 
 
 class TableNames(str, Enum):
@@ -13,6 +13,8 @@ class TableNames(str, Enum):
 
     WebLoader = "web_loader"
     PDFLoder = "pdf_loader"
+
+    OpenAILLM = "openai_llm"
 
 
 TABLE_SCHEMAS = {
@@ -38,11 +40,15 @@ TABLE_SCHEMAS = {
         "original_text": mapped_column(UnicodeText, nullable=False),
         "summary": mapped_column(UnicodeText, nullable=False),
     },
+    TableNames.OpenAILLM: {
+        "prompt": mapped_column(UnicodeText, nullable=False),
+        "response": mapped_column(UnicodeText, nullable=False),
+    },
 }
 
 
 def init_table_schemas():
     for table_name, column_mapping in TABLE_SCHEMAS.items():
-        Cache._get_or_create_cache_model(
+        SQLAlchemyCache._get_or_create_cache_model(
             table_name.value, column_mapping=column_mapping
         )
